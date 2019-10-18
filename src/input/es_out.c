@@ -523,6 +523,7 @@ static int EsOutSetRecord(  es_out_t *out, bool b_record )
             if( !p_es->p_dec || p_es->p_master )
                 continue;
 
+            msg_Dbg( p_sys->p_input, "EsOutSetRecords: Creating Decoder");
             p_es->p_dec_record = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, p_sys->p_sout_record );
             if( p_es->p_dec_record && p_sys->b_buffering )
                 input_DecoderStartWait( p_es->p_dec_record );
@@ -795,7 +796,12 @@ static void EsOutProgramsChangeRate( es_out_t *out )
     es_out_sys_t      *p_sys = out->p_sys;
 
     for( int i = 0; i < p_sys->i_pgrm; i++ )
+    {
+        mtime_t i_stream = ClockGetStreamSystem(p_sys->pgrm[i]->p_clock, true);
+        mtime_t i_system = ClockGetStreamSystem(p_sys->pgrm[i]->p_clock, false);
+        msg_Dbg( p_sys->p_input, "ChangeRate: i_rate=%d, ref.i_stream=%lld , ref.i_system=%lld",p_sys->i_rate,i_stream, i_system);
         input_clock_ChangeRate( p_sys->pgrm[i]->p_clock, p_sys->i_rate );
+    }
 }
 
 static void EsOutFrameNext( es_out_t *out )
@@ -1085,7 +1091,8 @@ static es_out_pgrm_t *EsOutProgramAdd( es_out_t *out, int i_group )
 {
     es_out_sys_t      *p_sys = out->p_sys;
     input_thread_t    *p_input = p_sys->p_input;
-
+    
+    msg_Dbg( p_sys->p_input, "EsOutProgramAdd: Adding program");
     es_out_pgrm_t *p_pgrm = malloc( sizeof( es_out_pgrm_t ) );
     if( !p_pgrm )
         return NULL;
@@ -1576,10 +1583,12 @@ static es_out_id_t *EsOutAddSlave( es_out_t *out, const es_format_t *fmt, es_out
     es->i_meta_id = p_sys->i_id++; /* always incremented */
     es->b_scrambled = false;
 
+
     switch( es->fmt.i_cat )
     {
     case AUDIO_ES:
     {
+        msg_Dbg( p_sys->p_input, "Adding Audio ES");
         es->fmt.i_codec = vlc_fourcc_GetCodecAudio( es->fmt.i_codec,
                                                     es->fmt.audio.i_bitspersample );
         es->i_channel = p_sys->audio.i_count++;
@@ -1607,6 +1616,7 @@ static es_out_id_t *EsOutAddSlave( es_out_t *out, const es_format_t *fmt, es_out
     }
 
     case VIDEO_ES:
+        msg_Dbg( p_sys->p_input, "Adding Video ES");
         es->fmt.i_codec = vlc_fourcc_GetCodec( es->fmt.i_cat, es->fmt.i_codec );
         es->i_channel = p_sys->video.i_count++;
 
@@ -1686,7 +1696,7 @@ static void EsCreateDecoder( es_out_t *out, es_out_id_t *p_es )
 {
     es_out_sys_t   *p_sys = out->p_sys;
     input_thread_t *p_input = p_sys->p_input;
-
+    msg_Dbg( p_sys->p_input, "EsCreateDecoder: Creating Decoder before if");
     p_es->p_dec = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, input_priv(p_input)->p_sout );
     if( p_es->p_dec )
     {
@@ -1695,6 +1705,7 @@ static void EsCreateDecoder( es_out_t *out, es_out_id_t *p_es )
 
         if( !p_es->p_master && p_sys->p_sout_record )
         {
+            msg_Dbg( p_sys->p_input, "EsCreateDecoder: Creating Decoder in if");
             p_es->p_dec_record = input_DecoderNew( p_input, &p_es->fmt, p_es->p_pgrm->p_clock, p_sys->p_sout_record );
             if( p_es->p_dec_record && p_sys->b_buffering )
                 input_DecoderStartWait( p_es->p_dec_record );
@@ -1774,7 +1785,7 @@ static void EsSelect( es_out_t *out, es_out_id_t *es )
                 return;
             }
         }
-
+        msg_Dbg( p_sys->p_input, "EsSelect: Creating Decoder");
         EsCreateDecoder( out, es );
 
         if( es->p_dec == NULL || es->p_pgrm != p_sys->p_pgrm )
@@ -1863,7 +1874,7 @@ static void EsOutSelect( es_out_t *out, es_out_id_t *es, bool b_force )
 {
     es_out_sys_t      *p_sys = out->p_sys;
     es_out_es_props_t *p_esprops = GetPropsByCat( p_sys, es->fmt.i_cat );
-
+    msg_Dbg( p_sys->p_input, "EsOutSelect");
     if( !p_sys->b_active ||
         ( !b_force && es->fmt.i_priority < ES_PRIORITY_SELECTABLE_MIN ) )
     {
@@ -2244,11 +2255,12 @@ static void EsOutDel( es_out_t *out, es_out_id_t *es )
 static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 {
     es_out_sys_t *p_sys = out->p_sys;
-
+    msg_Dbg( p_sys->p_input, "EsOutControlLocked: i_query=%d",i_query);
     switch( i_query )
     {
     case ES_OUT_SET_ES_STATE:
     {
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_ES_STATE");
         es_out_id_t *es = va_arg( args, es_out_id_t * );
         bool b = va_arg( args, int );
         if( b && !EsIsSelected( es ) )
@@ -2293,6 +2305,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 
     case ES_OUT_SET_MODE:
     {
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_MODE");
         const int i_mode = va_arg( args, int );
         assert( i_mode == ES_OUT_MODE_NONE || i_mode == ES_OUT_MODE_ALL ||
                 i_mode == ES_OUT_MODE_AUTO || i_mode == ES_OUT_MODE_PARTIAL ||
@@ -2335,7 +2348,15 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
     {
 #define IGNORE_ES DATA_ES
         es_out_id_t *es = va_arg( args, es_out_id_t * );
-
+        if(i_query==ES_OUT_SET_ES)
+        {
+            msg_Dbg( p_sys->p_input, "ES_OUT_SET_ES");
+        }
+        else
+        {
+            msg_Dbg( p_sys->p_input, "ES_OUT_RESTART_ES");
+        }
+        
         enum es_format_category_e i_cat;
         if( es == NULL )
             i_cat = UNKNOWN_ES;
@@ -2356,11 +2377,13 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
                 {
                     if( i_query == ES_OUT_RESTART_ES && p_sys->es[i]->p_dec )
                     {
+                        msg_Dbg( p_sys->p_input, "ES_OUT_RESTART_ES: Creating Decoder");
                         EsDestroyDecoder( out, p_sys->es[i] );
                         EsCreateDecoder( out, p_sys->es[i] );
                     }
                     else if( i_query == ES_OUT_SET_ES )
                     {
+                        msg_Dbg( p_sys->p_input, "ES_OUT_SET_ES");
                         EsOutSelect( out, es, true );
                     }
                     break;
@@ -2412,6 +2435,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
     }
     case ES_OUT_START_ALL_ES:
     {
+        msg_Dbg( p_sys->p_input, "ES_OUT_START_ALL_ES");
         int *selected_es = va_arg( args, void * );
         int count = selected_es[0];
         for( int i = 0; i < count; ++i )
@@ -2420,6 +2444,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
             if( i_id != -1 )
             {
                 es_out_id_t *p_es = EsOutGetFromID( out, i_id );
+                msg_Dbg( p_sys->p_input, "ES_OUT_START_ALL_ES: Creating Decoder in if");
                 EsCreateDecoder( out, p_es );
             }
         }
@@ -2473,12 +2498,16 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         /* Search program */
         if( i_query == ES_OUT_SET_PCR )
         {
+            msg_Dbg( p_sys->p_input, "ES_OUT_SET_PCR");
             p_pgrm = p_sys->p_pgrm;
-            if( !p_pgrm )
+            if( !p_pgrm ){
+                msg_Dbg( p_sys->p_input, "ES_OUT_SET_PCR: Adding program");
                 p_pgrm = EsOutProgramAdd( out, i_group );   /* Create it */
+            }
         }
         else
         {
+            msg_Dbg( p_sys->p_input, "ES_OUT_SET_GROUP_PCR");
             i_group = va_arg( args, int );
             p_pgrm = EsOutProgramFind( out, i_group );
         }
@@ -2555,6 +2584,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 
     case ES_OUT_SET_GROUP:
     {
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_GROUP");
         int i = va_arg( args, int );
         for( int j = 0; j < p_sys->i_pgrm; j++ )
         {
@@ -2572,6 +2602,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
     {
         /* This ain't pretty but is need by some demuxers (eg. Ogg )
          * to update the p_extra data */
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_ES_FMT");
         es_out_id_t *es = va_arg( args, es_out_id_t * );
         es_format_t *p_fmt = va_arg( args, es_format_t * );
         if( es == NULL )
@@ -2582,6 +2613,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 
         if( es->p_dec )
         {
+            msg_Dbg( p_sys->p_input, "ES_OUT_SET_ES_FMT: Creating Decoder in if");
             EsDestroyDecoder( out, es );
             EsCreateDecoder( out, es );
         }
@@ -2763,6 +2795,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 
     case ES_OUT_SET_RATE:
     {
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_RATE");
         const int i_src_rate = va_arg( args, int );
         const int i_rate = va_arg( args, int );
 
@@ -2775,7 +2808,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
     case ES_OUT_SET_TIME:
     {
         const mtime_t i_date = va_arg( args, mtime_t );
-
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_TIME: i_date=%lld",i_date);
         assert( i_date == -1 );
         EsOutChangePosition( out );
 

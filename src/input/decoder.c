@@ -141,6 +141,10 @@ struct decoder_owner_sys_t
 
     /* Delay */
     mtime_t i_ts_delay;
+
+    //***************
+    bool b_pausing;
+    mtime_t i_last_stream;
 };
 
 /* Pictures which are DECODER_BOGUS_VIDEO_DELAY or more in advance probably have
@@ -635,7 +639,7 @@ static mtime_t DecoderGetDisplayDate( decoder_t *p_dec, mtime_t i_ts )
     if( !p_owner->p_clock || i_ts <= VLC_TS_INVALID )
         return i_ts;
 
-    if( input_clock_ConvertTS( VLC_OBJECT(p_dec), p_owner->p_clock, NULL, &i_ts, NULL, INT64_MAX ) ) {
+    if( input_clock_ConvertTS( VLC_OBJECT(p_dec), p_owner->p_clock, NULL, &i_ts, NULL, INT64_MAX,1 ) ) {
         msg_Err(p_dec, "Could not get display date for timestamp %"PRId64"", i_ts);
         return VLC_TS_INVALID;
     }
@@ -775,11 +779,11 @@ static inline void DecoderUpdatePreroll( int64_t *pi_preroll, const block_t *p )
 }
 
 static void DecoderFixTs( decoder_t *p_dec, mtime_t *pi_ts0, mtime_t *pi_ts1,
-                          mtime_t *pi_duration, int *pi_rate, mtime_t i_ts_bound )
+                          mtime_t *pi_duration, int *pi_rate, mtime_t i_ts_bound, bool b_isVideo )
 {
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
     input_clock_t   *p_clock = p_owner->p_clock;
-
+    msg_Dbg(p_dec, "In DecoderFixTs");
     vlc_assert_locked( &p_owner->lock );
 
     const mtime_t i_es_delay = p_owner->i_ts_delay;
@@ -797,7 +801,7 @@ static void DecoderFixTs( decoder_t *p_dec, mtime_t *pi_ts0, mtime_t *pi_ts1,
             *pi_ts1 += i_es_delay;
         if( i_ts_bound != INT64_MAX )
             i_ts_bound += i_es_delay;
-        if( input_clock_ConvertTS( VLC_OBJECT(p_dec), p_clock, &i_rate, pi_ts0, pi_ts1, i_ts_bound ) ) {
+        if( input_clock_ConvertTS( VLC_OBJECT(p_dec), p_clock, &i_rate, pi_ts0, pi_ts1, i_ts_bound, b_isVideo ) ) {
             const char *psz_name = module_get_name( p_dec->p_module, false );
             if( pi_ts1 != NULL )
                 msg_Err(p_dec, "Could not convert timestamps %"PRId64
@@ -827,6 +831,7 @@ static void DecoderFixTs( decoder_t *p_dec, mtime_t *pi_ts0, mtime_t *pi_ts1,
 #ifdef ENABLE_SOUT
 static int DecoderPlaySout( decoder_t *p_dec, block_t *p_sout_block )
 {
+    msg_Err(p_dec, "In DecoderPlaySout");
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
 
     assert( p_owner->p_clock );
@@ -842,7 +847,7 @@ static int DecoderPlaySout( decoder_t *p_dec, block_t *p_sout_block )
 
     DecoderWaitUnblock( p_dec );
     DecoderFixTs( p_dec, &p_sout_block->i_dts, &p_sout_block->i_pts,
-                  &p_sout_block->i_length, NULL, INT64_MAX );
+                  &p_sout_block->i_length, NULL, INT64_MAX,1 );
 
     vlc_mutex_unlock( &p_owner->lock );
 
@@ -999,6 +1004,8 @@ static int DecoderPlayVideo( decoder_t *p_dec, picture_t *p_picture,
     vout_thread_t  *p_vout = p_owner->p_vout;
     bool prerolled;
 
+    msg_Dbg( p_dec, "In DecoderPlayVideo" );
+
     vlc_mutex_lock( &p_owner->lock );
     if( p_owner->i_preroll_end > p_picture->date )
     {
@@ -1044,11 +1051,13 @@ static int DecoderPlayVideo( decoder_t *p_dec, picture_t *p_picture,
         p_owner->b_first = false;
         p_picture->b_force = true;
     }
-
+    
     const bool b_dated = p_picture->date > VLC_TS_INVALID;
     int i_rate = INPUT_RATE_DEFAULT;
+    
+
     DecoderFixTs( p_dec, &p_picture->date, NULL, NULL,
-                  &i_rate, DECODER_BOGUS_VIDEO_DELAY );
+                  &i_rate, DECODER_BOGUS_VIDEO_DELAY, 1);
 
     vlc_mutex_unlock( &p_owner->lock );
 
@@ -1133,6 +1142,8 @@ static int DecoderPlayAudio( decoder_t *p_dec, block_t *p_audio,
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
     bool prerolled;
 
+    msg_Dbg( p_dec, "In DecoderPlayAudio" );
+
     assert( p_audio != NULL );
 
     vlc_mutex_lock( &p_owner->lock );
@@ -1174,10 +1185,10 @@ static int DecoderPlayAudio( decoder_t *p_dec, block_t *p_audio,
 
     /* */
     int i_rate = INPUT_RATE_DEFAULT;
-
+    
     DecoderWaitUnblock( p_dec );
     DecoderFixTs( p_dec, &p_audio->i_pts, NULL, &p_audio->i_length,
-                  &i_rate, AOUT_MAX_ADVANCE_TIME );
+                  &i_rate, AOUT_MAX_ADVANCE_TIME, 0 );
     vlc_mutex_unlock( &p_owner->lock );
 
     audio_output_t *p_aout = p_owner->p_aout;
@@ -1271,7 +1282,7 @@ static void DecoderPlaySpu( decoder_t *p_dec, subpicture_t *p_subpic )
 
     DecoderWaitUnblock( p_dec );
     DecoderFixTs( p_dec, &p_subpic->i_start, &p_subpic->i_stop, NULL,
-                  NULL, INT64_MAX );
+                  NULL, INT64_MAX, 0 );
     vlc_mutex_unlock( &p_owner->lock );
 
     if( p_subpic->i_start <= VLC_TS_INVALID
@@ -1528,6 +1539,182 @@ static void DecoderProcessFlush( decoder_t *p_dec )
     vlc_mutex_unlock( &p_owner->lock );
 }
 
+
+
+
+/***************************************************************
+Video functions 
+****************************************************************/
+static void DecoderMaskChangeRate_video(decoder_t *p_dec, int i_rate)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    input_clock_ChangeRate_video(p_owner->p_clock,i_rate);
+}
+static void DecoderMaskChangePause_video(decoder_t *p_dec,bool b_paused)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    mtime_t date = mdate();
+    if(b_paused)
+    {
+        // input_thread_t *p_input = p_owner->p_input;
+        // bool b_source_paused = input_priv(p_input)->b_can_pause;
+        // assert( !b_source_paused == !b_paused );
+        input_DecoderChangePause( p_dec, true, date );
+        input_clock_ChangePause_video( p_owner->p_clock, true, date );
+    }
+    else
+    {
+        input_DecoderChangePause( p_dec, false, date );
+        input_clock_ChangePause_video( p_owner->p_clock, false, date );
+    }
+    
+}
+static void DecoderMaskSync(decoder_t *p_dec)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    input_DecoderFlush( p_dec );
+    input_clock_Reset(p_owner->p_clock);
+}
+/***************************************************************
+Audio functions 
+****************************************************************/
+static void DecoderMaskChangeRate_audio(decoder_t *p_dec, int i_rate)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    input_clock_ChangeRate_audio(p_owner->p_clock,i_rate);
+}
+static void DecoderMaskChangePause_audio(decoder_t *p_dec,bool b_paused)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    mtime_t date = mdate();
+    if(b_paused)
+    {
+        // input_thread_t *p_input = p_owner->p_input;
+        // bool b_source_paused = input_priv(p_input)->b_can_pause;
+        // assert( !b_source_paused == !b_paused );
+        input_DecoderChangePause( p_dec, true, date );
+        input_clock_ChangePause_audio( p_owner->p_clock, true, date );
+    }
+    else
+    {
+        input_DecoderChangePause( p_dec, false, date );
+        input_clock_ChangePause_audio( p_owner->p_clock, false, date );
+    }
+    
+}
+
+static void DecoderApplyMask(decoder_t *p_dec)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    input_thread_t *p_input = p_owner->p_input;
+    if(p_dec->fmt_out.i_cat == VIDEO_ES)
+    {
+        msg_Dbg(p_dec,"In DecoderApplyMask: video_es");
+        mtime_t i_last_stream = VLC_TS_INVALID;
+        input_clock_GetStreamLast_video(p_owner->p_clock,&i_last_stream);
+        msg_Dbg(p_dec,"DecoderApplyMask: video - i_last_stream = %lld",i_last_stream);
+        int i_rate = INPUT_RATE_DEFAULT;
+        int t = 1000000;
+        if(i_last_stream >=0 && i_last_stream<15*t)
+        {
+            msg_Dbg(p_dec,"DecoderApplyMask: case 1");
+            if(p_owner->i_last_stream<=0)
+            {
+                i_rate = 1000;
+                input_clock_ChangeRate_video(p_owner->p_clock,i_rate);
+                p_owner->i_last_stream = i_last_stream;
+            }
+        }
+        // else if(i_last_stream>=15*t && i_last_stream<30*t)
+        // {
+        //     msg_Dbg(p_dec,"DecoderApplyMask: case 2");
+        //     bool b_video_paused;
+        //     input_clock_GetPaused_video(p_owner->p_clock,&b_video_paused);
+        //     if(p_owner->i_last_stream<=15*t)
+        //     {
+        //         msg_Dbg(p_dec,"DecoderApplyMask: case 2, in if entering");
+        //         mtime_t date = mdate();
+        //         input_DecoderChangePause( p_dec, true, date );
+        //         input_clock_ChangePause_video( p_owner->p_clock, true, date );
+        //         i_rate = 1000;
+        //         input_clock_ChangeRate_video(p_owner->p_clock,i_rate);
+        //         p_owner->i_last_stream = i_last_stream;
+        //         msg_Dbg(p_dec,"DecoderApplyMask: case 2, in if exiting");
+        //     }
+            
+        // }
+        else{
+            msg_Dbg(p_dec,"DecoderApplyMask: case 3");
+            // bool b_video_paused;
+            // input_clock_GetPaused_video(p_owner->p_clock,&b_video_paused);
+            // if(p_owner->paused && b_video_paused && !p_owner->b_pausing)
+            // {
+            //     msg_Dbg(p_dec,"DecoderApplyMask: case 3, in if - Resuming Video");
+            //     mtime_t date = mdate();
+            //     input_DecoderFlush( p_dec );
+            //     input_clock_Reset(p_owner->p_clock);
+            //     input_DecoderChangePause( p_dec, false, date );
+            //     input_clock_ChangePause_video( p_owner->p_clock, false, date );
+            //     p_owner->b_pausing = true;
+            // }
+
+            // if(!p_owner->b_pausing)
+            // {
+            //     msg_Dbg(p_dec,"Flushing video decoder & resetting clocks");
+            //     input_DecoderFlush( p_dec );
+            //     input_clock_Reset(p_owner->p_clock);
+            //     p_owner->b_pausing = true;
+            // }
+
+            // i_rate = 1000;
+            // input_clock_ChangeRate_video(p_owner->p_clock,i_rate);
+
+
+            // if(p_owner->i_last_stream<=30*t)
+            // {
+            //     msg_Dbg(p_dec,"DecoderApplyMask: case 3, in if - Resuming Video");
+            //     mtime_t date = mdate();
+            //     input_DecoderFlush( p_dec );
+            //     input_clock_Reset(p_owner->p_clock);
+            //     input_DecoderChangePause( p_dec, false, date );
+            //     input_clock_ChangePause_video( p_owner->p_clock, false, date );
+            //     i_rate = 1000;
+            //     input_clock_ChangeRate_video(p_owner->p_clock,i_rate);
+            //     p_owner->i_last_stream = i_last_stream;
+            // }
+            if(p_owner->i_last_stream<=15*t)
+            {
+                msg_Dbg(p_dec,"Flushing video decoder & resetting clocks");
+                input_DecoderFlush( p_dec );
+                input_clock_Reset(p_owner->p_clock);
+                i_rate = 1000;
+                input_clock_ChangeRate_video(p_owner->p_clock,i_rate);
+                p_owner->i_last_stream = i_last_stream;
+            }
+
+        }
+    }
+    else if(p_dec->fmt_out.i_cat == AUDIO_ES || p_dec->fmt_out.i_cat == SPU_ES)
+    {
+        msg_Dbg(p_dec,"In DecoderApplyMask: audio_es");
+        mtime_t i_last_stream = VLC_TS_INVALID;
+        input_clock_GetStreamLast_audio(p_owner->p_clock,&i_last_stream);
+        msg_Dbg(p_dec,"DecoderApplyMask: audio - i_last_stream = %lld",i_last_stream);
+        int i_rate = INPUT_RATE_DEFAULT;
+        int t = 1000000;
+        if(i_last_stream >0 && i_last_stream<15*t)
+        {
+            i_rate = 500;
+        }
+        else{
+            i_rate = INPUT_RATE_DEFAULT;
+        }
+        input_clock_ChangeRate_audio(p_owner->p_clock,i_rate);
+    }
+
+}
+
+
 /**
  * The decoding main loop
  *
@@ -1545,6 +1732,22 @@ static void *DecoderThread( void *p_data )
 
     for( ;; )
     {
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"start of VideoDecoder loop");
+
+
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"before ApplyMask VideoDecoder loop");
+
+        vlc_fifo_Unlock( p_owner->p_fifo );
+        DecoderApplyMask(p_dec);
+        vlc_fifo_Lock( p_owner->p_fifo );
+
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"After ApplyMask VideoDecoder loop");
+
+
+
         if( p_owner->flushing )
         {   /* Flush before/regardless of pause. We do not want to resume just
              * for the sake of flushing (glitches could otherwise happen). */
@@ -1565,6 +1768,8 @@ static void *DecoderThread( void *p_data )
 
             continue;
         }
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"After flushing in VideoDecoder loop");
 
         if( paused != p_owner->paused )
         {   /* Update playing/paused status of the output */
@@ -1576,27 +1781,58 @@ static void *DecoderThread( void *p_data )
 
             /* NOTE: Only the audio and video outputs care about pause. */
             msg_Dbg( p_dec, "toggling %s", paused ? "resume" : "pause" );
+
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"After toggling resume VideoDecoder loop");
+
             if( p_owner->p_vout != NULL )
                 vout_ChangePause( p_owner->p_vout, paused, date );
+
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"After vout_ChangePause VideoDecoder loop");
+
             if( p_owner->p_aout != NULL )
                 aout_DecChangePause( p_owner->p_aout, paused, date );
+            
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"After aout_DecChangePause VideoDecoder loop");
+
 
             vlc_restorecancel( canc );
+
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"After vlc_restorecancel VideoDecoder loop");
             vlc_fifo_Lock( p_owner->p_fifo );
+
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"before continue VideoDecoder loop");
             continue;
         }
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"After paused VideoDecoder loop");
+
 
         if( p_owner->paused && p_owner->frames_countdown == 0 )
         {   /* Wait for resumption from pause */
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"Starting wait VideoDecoder loop");
             p_owner->b_idle = true;
             vlc_cond_signal( &p_owner->wait_acknowledge );
             vlc_fifo_Wait( p_owner->p_fifo );
             p_owner->b_idle = false;
+            // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+            //     msg_Dbg(p_dec,"Ending wait VideoDecoder loop");
             continue;
         }
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"After resumption from pause VideoDecoder loop");
 
         vlc_cond_signal( &p_owner->wait_fifo );
         vlc_testcancel(); /* forced expedited cancellation in case of stop */
+
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"After testcancel VideoDecoder loop");
+
 
         block_t *p_block = vlc_fifo_DequeueUnlocked( p_owner->p_fifo );
         if( p_block == NULL )
@@ -1613,11 +1849,20 @@ static void *DecoderThread( void *p_data )
              * drain. Pass p_block = NULL to decoder just once. */
         }
 
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"before fifo unlock VideoDecoder loop");
+
+
         vlc_fifo_Unlock( p_owner->p_fifo );
 
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"after fifo unlock VideoDecoder loop");
+
+                
         int canc = vlc_savecancel();
         DecoderProcess( p_dec, p_block );
 
+        
         if( p_block == NULL )
         {   /* Draining: the decoder is drained and all decoded buffers are
              * queued to the output at this point. Now drain the output. */
@@ -1626,6 +1871,9 @@ static void *DecoderThread( void *p_data )
         }
         vlc_restorecancel( canc );
 
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"After restorecancel VideoDecoder loop");
+
         /* TODO? Wait for draining instead of polling. */
         vlc_mutex_lock( &p_owner->lock );
         if( p_owner->b_draining && (p_block == NULL) )
@@ -1633,9 +1881,15 @@ static void *DecoderThread( void *p_data )
             p_owner->b_draining = false;
             p_owner->drained = true;
         }
+
+        // if(p_dec->fmt_out.i_cat == VIDEO_ES)
+        //     msg_Dbg(p_dec,"End of iteration VideoDecoder loop");
+
         vlc_fifo_Lock( p_owner->p_fifo );
         vlc_cond_signal( &p_owner->wait_acknowledge );
         vlc_mutex_unlock( &p_owner->lock );
+
+        
     }
     vlc_cleanup_pop();
     vlc_assert_unreachable();
@@ -1700,6 +1954,10 @@ static decoder_t * CreateDecoder( vlc_object_t *p_parent,
     p_owner->drained = false;
     atomic_init( &p_owner->reload, RELOAD_NO_REQUEST );
     p_owner->b_idle = false;
+
+    //******
+    p_owner->b_pausing = false;
+    p_owner->i_last_stream = VLC_TS_INVALID;
 
     es_format_Init( &p_owner->fmt, fmt->i_cat, 0 );
 

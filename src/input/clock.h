@@ -109,7 +109,7 @@ void    input_clock_ChangeSystemOrigin( input_clock_t *, bool b_absolute, mtime_
  * Otherwise it will return VLC_SUCCESS.
  */
 int input_clock_ConvertTS( vlc_object_t *, input_clock_t *, int *pi_rate,
-                           mtime_t *pi_ts0, mtime_t *pi_ts1, mtime_t i_ts_bound );
+                           mtime_t *pi_ts0, mtime_t *pi_ts1, mtime_t i_ts_bound, bool b_isVideo );
 
 /**
  * This function returns the current rate.
@@ -135,5 +135,20 @@ void input_clock_SetJitter( input_clock_t *,
  * XXX in the current implementation, the pts_delay will never be decreased.
  */
 mtime_t input_clock_GetJitter( input_clock_t * );
+
+
+
+void input_clock_ChangeRate_audio( input_clock_t *cl, int i_rate );
+void input_clock_ChangeRate_video( input_clock_t *cl, int i_rate );
+void input_clock_GetStreamLast_audio(input_clock_t *cl, mtime_t *pi_stream_last);
+void input_clock_GetStreamLast_video(input_clock_t *cl, mtime_t *pi_stream_last);
+void input_clock_ChangePause_audio( input_clock_t *cl, bool b_paused, mtime_t i_date );
+void input_clock_ChangePause_video( input_clock_t *cl, bool b_paused, mtime_t i_date );
+void input_clock_GetPaused_audio(input_clock_t *cl,bool *b_audio_paused);
+void input_clock_GetPaused_video(input_clock_t *cl,bool *b_video_paused);
+void input_clock_Reset_audio( input_clock_t *cl );
+void input_clock_Reset_video( input_clock_t *cl );
+
+mtime_t ClockGetStreamSystem(input_clock_t *cl, bool isStream);
 
 #endif

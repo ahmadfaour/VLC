@@ -625,6 +625,7 @@ static int ControlLockedSetFrameNext( es_out_t *p_out )
 static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
 {
     es_out_sys_t *p_sys = p_out->p_sys;
+    msg_Dbg(p_sys->p_input,"ControlLocked: i_query=%d",i_query);
 
     switch( i_query )
     {

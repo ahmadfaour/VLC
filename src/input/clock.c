@@ -178,6 +178,10 @@ struct input_clock_t
     int     i_rate;
     mtime_t i_pts_delay;
     mtime_t i_pause_date;
+
+    /*Audio clock*/
+    input_clock_t* cl_audio;
+
 };
 
 static mtime_t ClockStreamToSystem( input_clock_t *, mtime_t i_stream );
@@ -188,7 +192,7 @@ static mtime_t ClockGetTsOffset( input_clock_t * );
 /*****************************************************************************
  * input_clock_New: create a new clock
  *****************************************************************************/
-input_clock_t *input_clock_New( int i_rate )
+static input_clock_t *input_clock_New_aux( int i_rate )
 {
     input_clock_t *cl = malloc( sizeof(*cl) );
     if( !cl )
@@ -217,17 +221,42 @@ input_clock_t *input_clock_New( int i_rate )
     cl->b_paused = false;
     cl->i_pause_date = VLC_TS_INVALID;
 
+    cl->cl_audio = NULL;
     return cl;
+}
+
+input_clock_t *input_clock_New( int i_rate ){
+
+    input_clock_t *cl = input_clock_New_aux(i_rate);
+    if(!cl)
+        return NULL;
+    cl->cl_audio = input_clock_New_aux(i_rate);
+    if(!cl->cl_audio)
+    {
+        input_clock_Delete(cl);
+        return NULL;
+    }
+    return cl;
+
+
 }
 
 /*****************************************************************************
  * input_clock_Delete: destroy a new clock
  *****************************************************************************/
-void input_clock_Delete( input_clock_t *cl )
+static void input_clock_Delete_aux( input_clock_t *cl )
 {
     AvgClean( &cl->drift );
     vlc_mutex_destroy( &cl->lock );
     free( cl );
+}
+void input_clock_Delete( input_clock_t *cl )
+{
+    if(cl->cl_audio)
+        input_clock_Delete_aux(cl->cl_audio);
+    
+    input_clock_Delete_aux(cl);
+    
 }
 
 /*****************************************************************************
@@ -236,7 +265,7 @@ void input_clock_Delete( input_clock_t *cl )
  *  i_ck_stream: date in stream clock
  *  i_ck_system: date in system clock
  *****************************************************************************/
-void input_clock_Update( input_clock_t *cl, vlc_object_t *p_log,
+static void input_clock_Update_aux( input_clock_t *cl, vlc_object_t *p_log,
                          bool *pb_late,
                          bool b_can_pace_control, bool b_buffering_allowed,
                          mtime_t i_ck_stream, mtime_t i_ck_system )
@@ -324,12 +353,33 @@ void input_clock_Update( input_clock_t *cl, vlc_object_t *p_log,
     }
 
     vlc_mutex_unlock( &cl->lock );
+
+}
+
+void input_clock_Update( input_clock_t *cl, vlc_object_t *p_log,
+                         bool *pb_late,
+                         bool b_can_pace_control, bool b_buffering_allowed,
+                         mtime_t i_ck_stream, mtime_t i_ck_system )
+{
+    input_clock_Update_aux( cl, p_log,
+                         pb_late,
+                         b_can_pace_control, b_buffering_allowed,
+                         i_ck_stream, i_ck_system );
+    bool tmp = *pb_late;
+
+    input_clock_Update_aux( cl->cl_audio, p_log,
+                         pb_late,
+                         b_can_pace_control, b_buffering_allowed,
+                         i_ck_stream, i_ck_system );
+    
+    *pb_late = tmp || *pb_late;
+    //Warning: might need a lock for pb_late.
 }
 
 /*****************************************************************************
  * input_clock_Reset:
  *****************************************************************************/
-void input_clock_Reset( input_clock_t *cl )
+static void input_clock_Reset_aux( input_clock_t *cl )
 {
     vlc_mutex_lock( &cl->lock );
 
@@ -341,10 +391,18 @@ void input_clock_Reset( input_clock_t *cl )
     vlc_mutex_unlock( &cl->lock );
 }
 
+void input_clock_Reset( input_clock_t *cl )
+{
+    if(cl->cl_audio)
+        input_clock_Reset_aux(cl->cl_audio);
+    input_clock_Reset_aux(cl);
+
+}
+
 /*****************************************************************************
  * input_clock_ChangeRate:
  *****************************************************************************/
-void input_clock_ChangeRate( input_clock_t *cl, int i_rate )
+static void input_clock_ChangeRate_aux( input_clock_t *cl, int i_rate )
 {
     vlc_mutex_lock( &cl->lock );
 
@@ -358,11 +416,17 @@ void input_clock_ChangeRate( input_clock_t *cl, int i_rate )
 
     vlc_mutex_unlock( &cl->lock );
 }
+void input_clock_ChangeRate( input_clock_t *cl, int i_rate)
+{
+    input_clock_ChangeRate_aux(cl->cl_audio,i_rate);
+    input_clock_ChangeRate_aux(cl,i_rate);
+
+}
 
 /*****************************************************************************
  * input_clock_ChangePause:
  *****************************************************************************/
-void input_clock_ChangePause( input_clock_t *cl, bool b_paused, mtime_t i_date )
+static void input_clock_ChangePause_aux( input_clock_t *cl, bool b_paused, mtime_t i_date )
 {
     vlc_mutex_lock( &cl->lock );
     assert( (!cl->b_paused) != (!b_paused) );
@@ -383,10 +447,17 @@ void input_clock_ChangePause( input_clock_t *cl, bool b_paused, mtime_t i_date )
     vlc_mutex_unlock( &cl->lock );
 }
 
+void input_clock_ChangePause( input_clock_t *cl, bool b_paused, mtime_t i_date )
+{   
+    input_clock_ChangePause_aux(cl->cl_audio,b_paused,i_date);
+    input_clock_ChangePause_aux(cl,b_paused,i_date);
+
+}
+
 /*****************************************************************************
  * input_clock_GetWakeup
  *****************************************************************************/
-mtime_t input_clock_GetWakeup( input_clock_t *cl )
+static mtime_t input_clock_GetWakeup_aux( input_clock_t *cl )
 {
     mtime_t i_wakeup = 0;
 
@@ -401,16 +472,26 @@ mtime_t input_clock_GetWakeup( input_clock_t *cl )
     return i_wakeup;
 }
 
+mtime_t input_clock_GetWakeup( input_clock_t *cl )
+{
+    mtime_t i_wakeup_audio =  input_clock_GetWakeup_aux(cl->cl_audio);
+    mtime_t i_wakeup_video =  input_clock_GetWakeup_aux(cl);
+    if(i_wakeup_audio<i_wakeup_video)
+        return i_wakeup_audio;
+    else
+        return i_wakeup_video;    
+
+}
+
 /*****************************************************************************
  * input_clock_ConvertTS
  *****************************************************************************/
-int input_clock_ConvertTS( vlc_object_t *p_object, input_clock_t *cl,
+static int input_clock_ConvertTS_aux( vlc_object_t *p_object, input_clock_t *cl,
                            int *pi_rate, mtime_t *pi_ts0, mtime_t *pi_ts1,
-                           mtime_t i_ts_bound )
+                           mtime_t i_ts_bound, bool b_isVideo )
 {
     assert( pi_ts0 );
     vlc_mutex_lock( &cl->lock );
-
     if( pi_rate )
         *pi_rate = cl->i_rate;
 
@@ -460,9 +541,24 @@ int input_clock_ConvertTS( vlc_object_t *p_object, input_clock_t *cl,
 
     return VLC_SUCCESS;
 }
+
+int input_clock_ConvertTS( vlc_object_t *p_object, input_clock_t *cl,
+                           int *pi_rate, mtime_t *pi_ts0, mtime_t *pi_ts1,
+                           mtime_t i_ts_bound, bool b_isVideo )
+{
+
+    //remove isVideo from the original function, add it only in aux.
+    if(!b_isVideo)
+        return input_clock_ConvertTS_aux(p_object,cl->cl_audio,pi_rate,pi_ts0,pi_ts1,i_ts_bound,b_isVideo);
+    else
+        return input_clock_ConvertTS_aux(p_object,cl,pi_rate,pi_ts0,pi_ts1,i_ts_bound,b_isVideo);
+                           
+                           
+}
 /*****************************************************************************
  * input_clock_GetRate: Return current rate
  *****************************************************************************/
+//TODO: NOT SEPERATED!!!! 
 int input_clock_GetRate( input_clock_t *cl )
 {
     int i_rate;
@@ -474,6 +570,10 @@ int input_clock_GetRate( input_clock_t *cl )
     return i_rate;
 }
 
+/*****************************************************************************
+ * input_clock_GetState: Return current state
+ *****************************************************************************/
+//TODO: NOT SEPERATED!!!! 
 int input_clock_GetState( input_clock_t *cl,
                           mtime_t *pi_stream_start, mtime_t *pi_system_start,
                           mtime_t *pi_stream_duration, mtime_t *pi_system_duration )
@@ -496,8 +596,11 @@ int input_clock_GetState( input_clock_t *cl,
 
     return VLC_SUCCESS;
 }
-
-void input_clock_ChangeSystemOrigin( input_clock_t *cl, bool b_absolute, mtime_t i_system )
+/*****************************************************************************
+ * input_clock_ChangeSystemOrigin: Change System Origin
+ *****************************************************************************/
+//TODO: might be wrong
+static void input_clock_ChangeSystemOrigin_aux( input_clock_t *cl, bool b_absolute, mtime_t i_system )
 {
     vlc_mutex_lock( &cl->lock );
 
@@ -523,6 +626,16 @@ void input_clock_ChangeSystemOrigin( input_clock_t *cl, bool b_absolute, mtime_t
     vlc_mutex_unlock( &cl->lock );
 }
 
+void input_clock_ChangeSystemOrigin( input_clock_t *cl, bool b_absolute, mtime_t i_system )
+{
+    if(cl->cl_audio)
+        input_clock_ChangeSystemOrigin_aux(cl->cl_audio,b_absolute,i_system);
+    input_clock_ChangeSystemOrigin_aux(cl,b_absolute,i_system);
+}
+/*****************************************************************************
+ * input_clock_GetSystemOrigin: Returns System Origin
+ *****************************************************************************/
+//TODO: NOT SEPERATED!!!! 
 void input_clock_GetSystemOrigin( input_clock_t *cl, mtime_t *pi_system, mtime_t *pi_delay )
 {
     vlc_mutex_lock( &cl->lock );
@@ -535,9 +648,11 @@ void input_clock_GetSystemOrigin( input_clock_t *cl, mtime_t *pi_system, mtime_t
 
     vlc_mutex_unlock( &cl->lock );
 }
-
+/*****************************************************************************
+ * input_clock_SetJitter: Sets Jitter
+ *****************************************************************************/
 #warning "input_clock_SetJitter needs more work"
-void input_clock_SetJitter( input_clock_t *cl,
+static void input_clock_SetJitter_aux( input_clock_t *cl,
                             mtime_t i_pts_delay, int i_cr_average )
 {
     vlc_mutex_lock( &cl->lock );
@@ -575,8 +690,19 @@ void input_clock_SetJitter( input_clock_t *cl,
 
     vlc_mutex_unlock( &cl->lock );
 }
-
-mtime_t input_clock_GetJitter( input_clock_t *cl )
+void input_clock_SetJitter( input_clock_t *cl,
+                            mtime_t i_pts_delay, int i_cr_average )
+{
+    if(cl->cl_audio)
+        input_clock_SetJitter_aux(cl->cl_audio,i_pts_delay,i_cr_average);
+    input_clock_SetJitter_aux(cl,i_pts_delay,i_cr_average);
+                           
+}
+/*****************************************************************************
+ * input_clock_GetJitter: Returns Jitter
+ *****************************************************************************/
+//TODO: NOT SEPERATED!!!!
+mtime_t input_clock_GetJitter_aux( input_clock_t *cl )
 {
     vlc_mutex_lock( &cl->lock );
 
@@ -596,6 +722,16 @@ mtime_t input_clock_GetJitter( input_clock_t *cl )
     vlc_mutex_unlock( &cl->lock );
 
     return i_pts_delay + i_late_median;
+}
+mtime_t input_clock_GetJitter( input_clock_t *cl )
+{
+    mtime_t audio_jitter = input_clock_GetJitter_aux(cl->cl_audio);
+    mtime_t video_jitter = input_clock_GetJitter_aux(cl);
+    if(audio_jitter>video_jitter)
+        return audio_jitter;
+    else
+        return video_jitter;
+    
 }
 
 /*****************************************************************************
@@ -672,4 +808,92 @@ static void AvgRescale( average_t *p_avg, int i_divider )
     p_avg->i_divider = i_divider;
     p_avg->i_value   = i_tmp / p_avg->i_divider;
     p_avg->i_residue = i_tmp % p_avg->i_divider;
+}
+
+
+
+
+//----------------------------------------------------------------------------
+//Functions we Added
+mtime_t ClockGetStreamSystem(input_clock_t *cl, bool isStream){
+
+    vlc_mutex_lock( &cl->lock );
+    mtime_t res = -1;
+    if(isStream)
+        res = cl->b_has_reference ? cl->ref.i_stream : -1;
+    
+    else
+        res = cl->b_has_reference ? cl->ref.i_system : -1;
+
+    vlc_mutex_unlock( &cl->lock );
+    return res;
+}
+/*****************************************************************************
+ * input_clock_GetStreamLast
+ *****************************************************************************/
+static void input_clock_GetStreamLast_aux(input_clock_t *cl, mtime_t *pi_stream_last){
+    vlc_mutex_lock( &cl->lock );
+    *pi_stream_last = cl->last.i_stream;
+    vlc_mutex_unlock( &cl->lock );
+}
+
+void input_clock_GetStreamLast_audio(input_clock_t *cl, mtime_t *pi_stream_last){
+    input_clock_GetStreamLast_aux(cl->cl_audio,pi_stream_last);
+}
+void input_clock_GetStreamLast_video(input_clock_t *cl, mtime_t *pi_stream_last){
+    input_clock_GetStreamLast_aux(cl,pi_stream_last);
+}
+/*****************************************************************************
+ * input_clock_GetPaused
+ *****************************************************************************/
+static void input_clock_GetPaused_aux(input_clock_t *cl,bool *b_paused){
+     vlc_mutex_lock( &cl->lock );
+    *b_paused = cl->b_paused;
+    vlc_mutex_unlock( &cl->lock );
+}
+
+void input_clock_GetPaused_audio(input_clock_t *cl,bool *b_audio_paused){
+     input_clock_GetPaused_aux(cl->cl_audio,b_audio_paused);
+}
+void input_clock_GetPaused_video(input_clock_t *cl,bool *b_video_paused){
+     input_clock_GetPaused_aux(cl,b_video_paused);
+}
+
+/*****************************************************************************
+ * input_clock_ChangeRate
+ *****************************************************************************/
+void input_clock_ChangeRate_audio( input_clock_t *cl, int i_rate ){
+    input_clock_ChangeRate_aux(cl->cl_audio,i_rate);
+}
+
+void input_clock_ChangeRate_video( input_clock_t *cl, int i_rate )
+{
+    input_clock_ChangeRate_aux(cl,i_rate);
+}
+/*****************************************************************************
+ * input_clock_ChangePause
+ *****************************************************************************/
+void input_clock_ChangePause_audio( input_clock_t *cl, bool b_paused, mtime_t i_date )
+{   
+    input_clock_ChangePause_aux(cl->cl_audio,b_paused,i_date);
+    
+}
+
+void input_clock_ChangePause_video( input_clock_t *cl, bool b_paused, mtime_t i_date )
+{   
+    input_clock_ChangePause_aux(cl,b_paused,i_date);
+
+}
+/*****************************************************************************
+ * input_clock_Reset
+ *****************************************************************************/
+void input_clock_Reset_audio( input_clock_t *cl )
+{
+    input_clock_Reset_aux(cl->cl_audio);
+
+}
+void input_clock_Reset_video( input_clock_t *cl )
+{
+    input_clock_Reset_aux(cl);
+
 }

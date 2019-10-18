@@ -719,7 +719,7 @@ static void MainLoop( input_thread_t *p_input, bool b_interactive )
             if( !input_priv(p_input)->master->b_eof )
             {
                 bool b_force_update = false;
-
+                msg_Dbg( p_input, "In MainLoop: Calling MainLoopDemux" );
                 MainLoopDemux( p_input, &b_force_update );
 
                 if( b_can_demux )
@@ -2085,6 +2085,7 @@ static bool Control( input_thread_t *p_input,
 
         case INPUT_CONTROL_SET_RATE:
         {
+            msg_Dbg( p_input, "Handling INPUT_CONTROL_SET_RATE" );
             /* Get rate and direction */
             long long i_rate = llabs( val.i_int );
             int i_rate_sign = val.i_int < 0 ? -1 : 1;
@@ -2126,9 +2127,11 @@ static bool Control( input_thread_t *p_input,
             if( i_rate != input_priv(p_input)->i_rate &&
                 !input_priv(p_input)->b_can_pace_control && input_priv(p_input)->b_can_rate_control )
             {
+                msg_Dbg( p_input, "INPUT_CONTROL_SET_RATE 1" );
                 if( !input_priv(p_input)->master->b_rescale_ts )
+                    msg_Dbg( p_input, "INPUT_CONTROL_SET_RATE 1 in if" );
                     es_out_Control( input_priv(p_input)->p_es_out, ES_OUT_RESET_PCR );
-
+                msg_Dbg( p_input, "INPUT_CONTROL_SET_RATE 2" );
                 if( demux_Control( input_priv(p_input)->master->p_demux, DEMUX_SET_RATE,
                                    &i_rate ) )
                 {
@@ -2140,11 +2143,13 @@ static bool Control( input_thread_t *p_input,
             /* */
             if( i_rate != input_priv(p_input)->i_rate )
             {
+                msg_Dbg( p_input, "INPUT_CONTROL_SET_RATE 3" );
                 input_priv(p_input)->i_rate = i_rate;
                 input_SendEventRate( p_input, i_rate );
 
                 if( input_priv(p_input)->master->b_rescale_ts )
                 {
+                    msg_Dbg( p_input, "INPUT_CONTROL_SET_RATE 3 in if" );
                     const int i_rate_source = (input_priv(p_input)->b_can_pace_control || input_priv(p_input)->b_can_rate_control ) ? i_rate : INPUT_RATE_DEFAULT;
                     es_out_SetRate( input_priv(p_input)->p_es_out, i_rate_source, i_rate );
                 }
@@ -3531,3 +3536,4 @@ char *input_CreateFilename(input_thread_t *input, const char *dir,
     free(filename);
     return path;
 }
+
