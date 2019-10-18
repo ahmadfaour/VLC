@@ -88,6 +88,13 @@ enum es_out_query_private_e
 
     /* Set End Of Stream */
     ES_OUT_SET_EOS,                                 /* res=cannot fail */
+    //**********************************
+    ES_OUT_SET_RATE_VIDEO,
+    ES_OUT_SET_PAUSE_STATE_VIDEO,
+    ES_OUT_SYNC_VIDEO,
+    ES_OUT_SET_RATE_AUDIO,
+    ES_OUT_SET_PAUSE_STATE_AUDIO,
+    ES_OUT_SYNC_AUDIO,
 };
 
 static inline void es_out_SetMode( es_out_t *p_out, int i_mode )

@@ -719,7 +719,7 @@ static void MainLoop( input_thread_t *p_input, bool b_interactive )
             if( !input_priv(p_input)->master->b_eof )
             {
                 bool b_force_update = false;
-                msg_Dbg( p_input, "In MainLoop: Calling MainLoopDemux" );
+                //msg_Dbg( p_input, "In MainLoop: Calling MainLoopDemux" );
                 MainLoopDemux( p_input, &b_force_update );
 
                 if( b_can_demux )
@@ -2158,7 +2158,68 @@ static bool Control( input_thread_t *p_input,
             }
             break;
         }
+        //**************************************************************
+        case INPUT_CONTROL_SET_RATE_VIDEO:
+        {
+            long long i_rate = llabs( val.i_int );
+            const int i_rate_source = (input_priv(p_input)->b_can_pace_control || input_priv(p_input)->b_can_rate_control ) ? i_rate : INPUT_RATE_DEFAULT;
+            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SET_RATE_VIDEO,i_rate_source,i_rate);
+            break;
+        }
+        case INPUT_CONTROL_SET_STATE_VIDEO:
+        {
+            switch( val.i_int )
+            {
+                case PLAYING_S:
+                    es_out_Control( input_priv(p_input)->p_es_out,ES_OUT_SET_PAUSE_STATE_VIDEO, false, false, i_control_date );
+                    break;
+                case PAUSE_S:
+                    if( es_out_Control( input_priv(p_input)->p_es_out,ES_OUT_SET_PAUSE_STATE_VIDEO, input_priv(p_input)->b_can_pause,
+                              true, i_control_date ) )
+                        msg_Warn( p_input, "cannot set pause state at es_out level" );
+                    break;
+                default:
+                    msg_Err( p_input, "invalid INPUT_CONTROL_SET_STATE_VIDEO" );
+            }
+            break;
+        }
+        case INPUT_CONTROL_SYNC_VIDEO:
+        {
+            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SYNC_VIDEO);
+            break;
+        }
+        /*************************/
+        case INPUT_CONTROL_SET_RATE_AUDIO:
+        {
+            long long i_rate = llabs( val.i_int );
+            const int i_rate_source = (input_priv(p_input)->b_can_pace_control || input_priv(p_input)->b_can_rate_control ) ? i_rate : INPUT_RATE_DEFAULT;
+            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SET_RATE_AUDIO,i_rate_source,i_rate);
+            break;
+        }
+        case INPUT_CONTROL_SET_STATE_AUDIO:
+        {
+            switch( val.i_int )
+            {
+                case PLAYING_S:
+                    es_out_Control( input_priv(p_input)->p_es_out,ES_OUT_SET_PAUSE_STATE_AUDIO, false, false, i_control_date );
+                    break;
+                case PAUSE_S:
+                    if( es_out_Control( input_priv(p_input)->p_es_out,ES_OUT_SET_PAUSE_STATE_AUDIO, input_priv(p_input)->b_can_pause,
+                              true, i_control_date ) )
+                        msg_Warn( p_input, "cannot set pause state at es_out level" );
+                    break;
+                default:
+                    msg_Err( p_input, "invalid INPUT_CONTROL_SET_STATE_AUDIO" );
+            }
+            break;
+        }
+        case INPUT_CONTROL_SYNC_AUDIO:
+        {
+            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SYNC_AUDIO);
+            break;
+        }
 
+        //**************************************************************
         case INPUT_CONTROL_SET_PROGRAM:
             /* No need to force update, es_out does it if needed */
             es_out_Control( input_priv(p_input)->p_es_out,

@@ -625,7 +625,7 @@ static int ControlLockedSetFrameNext( es_out_t *p_out )
 static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
 {
     es_out_sys_t *p_sys = p_out->p_sys;
-    msg_Dbg(p_sys->p_input,"ControlLocked: i_query=%d",i_query);
+    //msg_Dbg(p_sys->p_input,"ControlLocked: i_query=%d",i_query);
 
     switch( i_query )
     {
@@ -709,6 +709,50 @@ static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
 
         return ControlLockedSetRate( p_out, i_src_rate, i_rate );
     }
+    //************************************************************
+    case ES_OUT_SET_RATE_VIDEO:
+    {
+        const int i_src_rate = (int)va_arg( args, int );
+        const int i_rate = (int)va_arg( args, int );
+
+        return es_out_Control(p_sys->p_out,ES_OUT_SET_RATE_VIDEO,i_src_rate,i_rate);
+    }
+
+    case ES_OUT_SET_PAUSE_STATE_VIDEO:
+    {
+        const bool b_source_paused = (bool)va_arg( args, int );
+        const bool b_paused = (bool)va_arg( args, int );
+        const mtime_t i_date = (mtime_t) va_arg( args, mtime_t );
+
+        return es_out_Control( p_sys->p_out, ES_OUT_SET_PAUSE_STATE_VIDEO, b_source_paused, b_paused, i_date );
+    }
+    case ES_OUT_SYNC_VIDEO:
+    {
+        return es_out_Control(p_sys->p_out,ES_OUT_SYNC_VIDEO);
+    }
+    /****************/
+    case ES_OUT_SET_RATE_AUDIO:
+    {
+        const int i_src_rate = (int)va_arg( args, int );
+        const int i_rate = (int)va_arg( args, int );
+
+        return es_out_Control(p_sys->p_out,ES_OUT_SET_RATE_AUDIO,i_src_rate,i_rate);
+    }
+
+    case ES_OUT_SET_PAUSE_STATE_AUDIO:
+    {
+        const bool b_source_paused = (bool)va_arg( args, int );
+        const bool b_paused = (bool)va_arg( args, int );
+        const mtime_t i_date = (mtime_t) va_arg( args, mtime_t );
+
+        return es_out_Control( p_sys->p_out, ES_OUT_SET_PAUSE_STATE_AUDIO, b_source_paused, b_paused, i_date );
+    }
+    case ES_OUT_SYNC_AUDIO:
+    {
+        return es_out_Control(p_sys->p_out,ES_OUT_SYNC_AUDIO);
+    }
+
+    //************************************************************
     case ES_OUT_SET_TIME:
     {
         const mtime_t i_date = (mtime_t)va_arg( args, mtime_t );
@@ -782,6 +826,9 @@ static int TsStart( es_out_t *p_out )
 {
     es_out_sys_t *p_sys = p_out->p_sys;
     ts_thread_t *p_ts;
+
+    msg_Dbg( p_sys->p_input, "Creating TsThread" );
+
 
     assert( !p_sys->b_delayed );
 
@@ -965,6 +1012,7 @@ static int TsChangePause( ts_thread_t *p_ts, bool b_source_paused, bool b_paused
 }
 static int TsChangeRate( ts_thread_t *p_ts, int i_src_rate, int i_rate )
 {
+    msg_Dbg( p_ts->p_input, "In TsChangeRate");
     int i_ret;
 
     vlc_mutex_lock( &p_ts->lock );

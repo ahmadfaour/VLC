@@ -597,6 +597,147 @@ static void EsOutChangeRate( es_out_t *out, int i_rate )
     p_sys->i_rate = i_rate;
     EsOutProgramsChangeRate( out );
 }
+//***************************************
+static void EsOutChangeRateVideo( es_out_t *out, int i_rate )
+{
+    es_out_sys_t      *p_sys = out->p_sys;
+    for( int i = 0; i < p_sys->i_pgrm; i++ )
+    {
+        input_clock_ChangeRate_video( p_sys->pgrm[i]->p_clock, i_rate );
+    }
+}
+static void EsOutProgramChangePauseVideo( es_out_t *out, bool b_paused, mtime_t i_date )
+{
+    es_out_sys_t *p_sys = out->p_sys;
+
+    for( int i = 0; i < p_sys->i_pgrm; i++ ) //what is a program?
+        input_clock_ChangePause_video( p_sys->pgrm[i]->p_clock, b_paused, i_date );
+}
+static void EsOutDecodersChangePauseVideo( es_out_t *out, bool b_paused, mtime_t i_date )
+{
+    es_out_sys_t *p_sys = out->p_sys;
+
+    /* Pause decoders first */
+    for( int i = 0; i < p_sys->i_es; i++ )
+    {
+        es_out_id_t *es = p_sys->es[i];
+
+        if( es->p_dec && es->p_dec->fmt_out.i_cat == VIDEO_ES)
+        {
+            input_DecoderChangePause( es->p_dec, b_paused, i_date );
+            // if( es->p_dec_record )
+            //     input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
+        }
+    }
+}
+static void EsOutChangePauseVideo( es_out_t *out, bool b_paused, mtime_t i_date )
+{
+    if(b_paused)
+    {
+        EsOutDecodersChangePauseVideo( out, true, i_date );
+        EsOutProgramChangePauseVideo( out, true, i_date );
+    }
+    else
+    {
+        EsOutDecodersChangePauseVideo( out, false, i_date );
+        EsOutProgramChangePauseVideo( out, false, i_date );
+    }
+}
+static void EsOutSyncVideo(es_out_t *out)
+{
+    es_out_sys_t      *p_sys = out->p_sys;
+
+    for( int i = 0; i < p_sys->i_es; i++ )
+    {
+        es_out_id_t *p_es = p_sys->es[i];
+
+        if( p_es->p_dec != NULL && p_es->p_dec->fmt_out.i_cat == VIDEO_ES)
+        {
+            input_DecoderFlush( p_es->p_dec );
+            // if( !p_sys->b_buffering )
+            // {
+            //     input_DecoderStartWait( p_es->p_dec );
+            //     if( p_es->p_dec_record != NULL )
+            //         input_DecoderStartWait( p_es->p_dec_record );
+            // }
+        }
+    }
+
+    for( int i = 0; i < p_sys->i_pgrm; i++ )
+        input_clock_Reset( p_sys->pgrm[i]->p_clock );
+}
+/**************************/
+
+static void EsOutChangeRateAudio( es_out_t *out, int i_rate )
+{
+    es_out_sys_t      *p_sys = out->p_sys;
+    for( int i = 0; i < p_sys->i_pgrm; i++ )
+    {
+        input_clock_ChangeRate_audio( p_sys->pgrm[i]->p_clock, i_rate );
+    }
+}
+static void EsOutProgramChangePauseAudio( es_out_t *out, bool b_paused, mtime_t i_date )
+{
+    es_out_sys_t *p_sys = out->p_sys;
+
+    for( int i = 0; i < p_sys->i_pgrm; i++ ) //what is a program?
+        input_clock_ChangePause_audio( p_sys->pgrm[i]->p_clock, b_paused, i_date );
+}
+static void EsOutDecodersChangePauseAudio( es_out_t *out, bool b_paused, mtime_t i_date )
+{
+    es_out_sys_t *p_sys = out->p_sys;
+
+    /* Pause decoders first */
+    for( int i = 0; i < p_sys->i_es; i++ )
+    {
+        es_out_id_t *es = p_sys->es[i];
+
+        if( es->p_dec && es->p_dec->fmt_out.i_cat == AUDIO_ES)
+        {
+            input_DecoderChangePause( es->p_dec, b_paused, i_date );
+            // if( es->p_dec_record )
+            //     input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
+        }
+    }
+}
+static void EsOutChangePauseAudio( es_out_t *out, bool b_paused, mtime_t i_date )
+{
+    if(b_paused)
+    {
+        EsOutDecodersChangePauseAudio( out, true, i_date );
+        EsOutProgramChangePauseAudio( out, true, i_date );
+    }
+    else
+    {
+        EsOutDecodersChangePauseAudio( out, false, i_date );
+        EsOutProgramChangePauseAudio( out, false, i_date );
+    }
+}
+static void EsOutSyncAudio(es_out_t *out)
+{
+    es_out_sys_t      *p_sys = out->p_sys;
+
+    for( int i = 0; i < p_sys->i_es; i++ )
+    {
+        es_out_id_t *p_es = p_sys->es[i];
+
+        if( p_es->p_dec != NULL && p_es->p_dec->fmt_out.i_cat == AUDIO_ES)
+        {
+            input_DecoderFlush( p_es->p_dec );
+            // if( !p_sys->b_buffering )
+            // {
+            //     input_DecoderStartWait( p_es->p_dec );
+            //     if( p_es->p_dec_record != NULL )
+            //         input_DecoderStartWait( p_es->p_dec_record );
+            // }
+        }
+    }
+
+    for( int i = 0; i < p_sys->i_pgrm; i++ )
+        input_clock_Reset( p_sys->pgrm[i]->p_clock );
+}
+
+//***************************************
 
 static void EsOutChangePosition( es_out_t *out )
 {
@@ -2255,7 +2396,7 @@ static void EsOutDel( es_out_t *out, es_out_id_t *es )
 static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 {
     es_out_sys_t *p_sys = out->p_sys;
-    msg_Dbg( p_sys->p_input, "EsOutControlLocked: i_query=%d",i_query);
+    //msg_Dbg( p_sys->p_input, "EsOutControlLocked: i_query=%d",i_query);
     switch( i_query )
     {
     case ES_OUT_SET_ES_STATE:
@@ -2498,7 +2639,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         /* Search program */
         if( i_query == ES_OUT_SET_PCR )
         {
-            msg_Dbg( p_sys->p_input, "ES_OUT_SET_PCR");
+            //msg_Dbg( p_sys->p_input, "ES_OUT_SET_PCR");
             p_pgrm = p_sys->p_pgrm;
             if( !p_pgrm ){
                 msg_Dbg( p_sys->p_input, "ES_OUT_SET_PCR: Adding program");
@@ -2507,7 +2648,7 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
         }
         else
         {
-            msg_Dbg( p_sys->p_input, "ES_OUT_SET_GROUP_PCR");
+            //msg_Dbg( p_sys->p_input, "ES_OUT_SET_GROUP_PCR");
             i_group = va_arg( args, int );
             p_pgrm = EsOutProgramFind( out, i_group );
         }
@@ -2804,7 +2945,66 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
 
         return VLC_SUCCESS;
     }
+    //*****************************************************
+    case ES_OUT_SET_RATE_VIDEO:
+    {
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_RATE_VIDEO");
+        const int i_src_rate = va_arg( args, int );
+        const int i_rate = va_arg( args, int );
 
+        assert( i_src_rate == i_rate );
+        EsOutChangeRateVideo( out, i_rate );
+        return VLC_SUCCESS;
+    }
+    
+    case ES_OUT_SET_PAUSE_STATE_VIDEO:
+    {
+        const bool b_source_paused = (bool)va_arg( args, int );
+        const bool b_paused = (bool)va_arg( args, int );
+        const mtime_t i_date = va_arg( args, mtime_t );
+
+        assert( !b_source_paused == !b_paused );
+        EsOutChangePauseVideo( out, b_paused, i_date );
+
+        return VLC_SUCCESS;
+    }
+    
+    case ES_OUT_SYNC_VIDEO:
+    {
+        EsOutSyncVideo(out);
+        return VLC_SUCCESS;
+    }
+    /**********************/
+    case ES_OUT_SET_RATE_AUDIO:
+    {
+        msg_Dbg( p_sys->p_input, "ES_OUT_SET_RATE_AUDIO");
+        const int i_src_rate = va_arg( args, int );
+        const int i_rate = va_arg( args, int );
+
+        assert( i_src_rate == i_rate );
+        EsOutChangeRateAudio( out, i_rate );
+        return VLC_SUCCESS;
+    }
+    
+    case ES_OUT_SET_PAUSE_STATE_AUDIO:
+    {
+        const bool b_source_paused = (bool)va_arg( args, int );
+        const bool b_paused = (bool)va_arg( args, int );
+        const mtime_t i_date = va_arg( args, mtime_t );
+
+        assert( !b_source_paused == !b_paused );
+        EsOutChangePauseAudio( out, b_paused, i_date );
+
+        return VLC_SUCCESS;
+    }
+    
+    case ES_OUT_SYNC_AUDIO:
+    {
+        EsOutSyncAudio(out);
+        return VLC_SUCCESS;
+    }
+
+    //*****************************************************
     case ES_OUT_SET_TIME:
     {
         const mtime_t i_date = va_arg( args, mtime_t );
