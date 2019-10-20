@@ -231,6 +231,7 @@ libvlccore_la_SOURCES = \
 	input/clock.c \
 	input/control.c \
 	input/decoder.c \
+	input/tinyexpr.c \
 	input/demux.c \
 	input/demux_chained.c \
 	input/es_out.c \
@@ -241,6 +242,7 @@ libvlccore_la_SOURCES = \
 	input/meta.c \
 	input/clock.h \
 	input/decoder.h \
+	input/tinyexpr.h \
 	input/demux.h \
 	input/es_out.h \
 	input/es_out_timeshift.h \

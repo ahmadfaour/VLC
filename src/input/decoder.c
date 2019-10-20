@@ -53,7 +53,7 @@
 #include "resource.h"
 
 #include "../video_output/vout_control.h"
-
+#include "tinyexpr.h"
 /*
  * Possibles values set in p_owner->reload atomic
  */
@@ -1608,6 +1608,22 @@ static void DecoderApplyMask(decoder_t *p_dec)
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
     input_thread_t *p_input = p_owner->p_input;
     vlc_value_t val;
+    msg_Dbg( p_dec, "Searching for mask value");
+    char* s = var_InheritString(p_dec,"mask");
+    if(s == NULL)
+        msg_Dbg( p_dec, "Recieved mask: NULL");
+    else
+        msg_Dbg( p_dec, "Recieved option: %s", s);
+    
+    int error;
+    double a = te_interp("(5+5)", &error);
+    if(!error)
+        msg_Dbg( p_dec, "Calculating: %lf", a);
+    else
+        msg_Dbg( p_dec, "Error calculating: %d", a);
+    
+
+
     if(p_dec->fmt_out.i_cat == VIDEO_ES)
     {
         msg_Dbg(p_dec,"In DecoderApplyMask: video_es");

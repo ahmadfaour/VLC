@@ -78,7 +78,7 @@ int config_LoadCmdLine( vlc_object_t *p_this, int i_argc,
          * dealing with boolean to allow for --foo and --no-foo */
         i_opts += p->conf.count + 2 * p->conf.booleans;
 
-    p_longopts = vlc_alloc( i_opts + 1, sizeof(*p_longopts)  );
+    p_longopts = vlc_alloc( i_opts + 1 + 1, sizeof(*p_longopts)  );
     if( p_longopts == NULL )
         return -1;
 
@@ -172,6 +172,19 @@ int config_LoadCmdLine( vlc_object_t *p_this, int i_argc,
             }
         }
     }
+    //******************
+    char *psz_mask_opt;
+    asprintf( &psz_mask_opt, "mask");
+    char *psz_default_mask;
+    asprintf( &psz_default_mask, "none");
+    p_longopts[i_index].name = psz_mask_opt;
+    p_longopts[i_index].has_arg = true;
+    p_longopts[i_index].flag = &flag;
+    p_longopts[i_index].val = 2;
+    var_Create( p_this, psz_mask_opt, VLC_VAR_STRING );
+    var_SetString( p_this, psz_mask_opt, psz_default_mask );
+    i_index++;
+    //******************
 
     /* Close the longopts and shortopts structures */
     memset( &p_longopts[i_index], 0, sizeof(*p_longopts) );
@@ -188,6 +201,13 @@ int config_LoadCmdLine( vlc_object_t *p_this, int i_argc,
                                       psz_shortopts,
                                       p_longopts, &i_index, &state ) ) != -1 )
     {
+        if( flag == 2 ) //mask-file option
+        {
+            const char *psz_name = p_longopts[i_index].name;
+            var_SetString( p_this, psz_name, state.arg );
+            continue;
+        }
+
         /* A long option has been recognized */
         if( i_cmd == 0 )
         {
