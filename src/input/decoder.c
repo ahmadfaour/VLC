@@ -150,7 +150,9 @@ struct decoder_owner_sys_t
     mtime_t i_last_stream;
     mtime_t i_seg_start;
     mtime_t i_seg_end;
+    mtime_t i_last_played;
     bool b_sync;
+    bool b_can_start_new_seg;
     double d_var;
     te_variable te_vars[1];
     te_expr *p_expr;
@@ -793,7 +795,7 @@ static void DecoderFixTs(decoder_t *p_dec, mtime_t *pi_ts0, mtime_t *pi_ts1,
 
     const bool b_ephemere = pi_ts1 && *pi_ts0 == *pi_ts1;
     int i_rate;
-
+    p_owner->i_last_played = *pi_ts0;
     if (*pi_ts0 > VLC_TS_INVALID)
     {
         *pi_ts0 += i_es_delay;
@@ -1737,13 +1739,15 @@ static void DecoderApplyMask(decoder_t *p_dec)
     if (p_dec->fmt_out.i_cat == VIDEO_ES)
     {
         msg_Dbg(p_dec,"Video: DecoderApplyMask");
-        mtime_t i_last_stream = VLC_TS_INVALID;
+        mtime_t i_last_stream = p_owner->i_last_played;
         mtime_t i_seg_start = p_owner->i_seg_start;
         mtime_t i_seg_end = p_owner->i_seg_end;
-        input_clock_GetStreamLast_video(p_owner->p_clock, &i_last_stream);
-        msg_Dbg(p_dec,"DecoderApplyMask: Video - i_last_stream = %lld",i_last_stream);
+        //input_clock_GetStreamLast_video(p_owner->p_clock, &i_last_stream);
+        //msg_Dbg(p_dec,"DecoderApplyMask: Video - i_last_stream = %lld",i_last_stream);
+        msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
         if (i_last_stream >= i_seg_start && i_last_stream < i_seg_end)
         {
+            p_owner->b_can_start_new_seg = true;
             p_owner->d_var = i_last_stream;
             const double d_denom = te_eval(p_owner->p_expr);
             msg_Dbg(p_dec,"Video: d_denom= %lf",d_denom);
@@ -1784,28 +1788,33 @@ static void DecoderApplyMask(decoder_t *p_dec)
 
         else
         {
-            msg_Dbg(p_dec,"Video: Entering new segment");
-            int err;
-            char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN],\
-                 p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN],\
-                 p_sync[MAX_LINE_LEN];
-            if(p_owner->p_expr)
+            if(p_owner->b_can_start_new_seg)
             {
-                te_free(p_owner->p_expr);
-                p_owner->p_expr = NULL;
-            }
-            if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync) != EOF){
-                p_owner->i_seg_start = atoi(p_start) * MICRO_SEC_FACTOR;
-                p_owner->i_seg_end = atoi(p_end) * MICRO_SEC_FACTOR;  
-                p_owner->p_expr = te_compile(p_video_func,p_owner->te_vars,1,&err);
-                if(err){
-                    msg_Dbg(p_dec,"Video: Error creating expression");
+                msg_Dbg(p_dec,"Video: Entering new segment");
+                int err;
+                char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN],\
+                    p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN],\
+                    p_sync[MAX_LINE_LEN];
+                if(p_owner->p_expr)
+                {
+                    te_free(p_owner->p_expr);
+                    p_owner->p_expr = NULL;
                 }
-                if( strcmp(p_sync,"sv") == 0 ){
-                    msg_Dbg(p_dec,"Video: Syncing");
-                    p_owner->b_sync = true;
-                    //DecoderControlPush(p_dec,INPUT_CONTROL_SYNC_VIDEO,NULL);  
+                if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync) != EOF){
+                    msg_Dbg(p_dec,"Video: Read new segment");
+                    p_owner->i_seg_start = atoi(p_start) * MICRO_SEC_FACTOR;
+                    p_owner->i_seg_end = atoi(p_end) * MICRO_SEC_FACTOR;  
+                    p_owner->p_expr = te_compile(p_video_func,p_owner->te_vars,1,&err);
+                    if(err){
+                        msg_Dbg(p_dec,"Video: Error creating expression");
+                    }
+                    if( strcmp(p_sync,"sv") == 0 ){
+                        msg_Dbg(p_dec,"Video: Syncing");
+                        p_owner->b_sync = true; 
+                    }
+                    msg_Dbg(p_dec,"Video: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
                 }
+                p_owner->b_can_start_new_seg = false;
             }
             
         }
@@ -1813,13 +1822,15 @@ static void DecoderApplyMask(decoder_t *p_dec)
     else //AUDIO_ES or SPU_ES
     {
         msg_Dbg(p_dec,"Audio: DecoderApplyMask");
-        mtime_t i_last_stream = VLC_TS_INVALID;
+        mtime_t i_last_stream = p_owner->i_last_played;
         mtime_t i_seg_start = p_owner->i_seg_start;
         mtime_t i_seg_end = p_owner->i_seg_end;
-        input_clock_GetStreamLast_audio(p_owner->p_clock, &i_last_stream);
-        msg_Dbg(p_dec,"DecoderApplyMask: Audio - i_last_stream = %lld",i_last_stream);
-        if (i_last_stream >= i_seg_start && i_last_stream <= i_seg_end)
+        //input_clock_GetStreamLast_audio(p_owner->p_clock, &i_last_stream);
+        //msg_Dbg(p_dec,"DecoderApplyMask: Audio - i_last_stream = %lld",i_last_stream);
+        msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
+        if (i_last_stream >= i_seg_start && i_last_stream < i_seg_end)
         {
+            p_owner->b_can_start_new_seg = true;
             p_owner->d_var = i_last_stream;
             const double d_denom = te_eval(p_owner->p_expr);
             msg_Dbg(p_dec,"Audio: d_denom= %lf",d_denom);
@@ -1860,27 +1871,31 @@ static void DecoderApplyMask(decoder_t *p_dec)
 
         else
         {
-            msg_Dbg(p_dec,"Audio: Entering new segment");
-            int err;
-            char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN], p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN], p_sync[MAX_LINE_LEN];
-            if(p_owner->p_expr)
+            if(p_owner->b_can_start_new_seg)
             {
-                te_free(p_owner->p_expr);
-                p_owner->p_expr = NULL;
-            }
-            if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync) != EOF){
-                p_owner->i_seg_start = atoi(p_start) * MICRO_SEC_FACTOR;
-                p_owner->i_seg_end = atoi(p_end) * MICRO_SEC_FACTOR;  
-                p_owner->p_expr = te_compile(p_audio_func,p_owner->te_vars,1,&err);
-                if(err){
-                    msg_Dbg(p_dec,"Audio: Error creating expression");
+                msg_Dbg(p_dec,"Audio: Entering new segment");
+                int err;
+                char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN], p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN], p_sync[MAX_LINE_LEN];
+                if(p_owner->p_expr)
+                {
+                    te_free(p_owner->p_expr);
+                    p_owner->p_expr = NULL;
                 }
-                if( strcmp(p_sync,"sa") == 0 ){
-                    msg_Dbg(p_dec,"Audio: Syncing");
-                    p_owner->b_sync = true;
-                    //DecoderControlPush(p_dec,INPUT_CONTROL_SYNC_AUDIO,NULL);  
+                if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync) != EOF){
+                    msg_Dbg(p_dec,"Audio: Read new segment");
+                    p_owner->i_seg_start = atoi(p_start) * MICRO_SEC_FACTOR;
+                    p_owner->i_seg_end = atoi(p_end) * MICRO_SEC_FACTOR;  
+                    p_owner->p_expr = te_compile(p_audio_func,p_owner->te_vars,1,&err);
+                    if(err){
+                        msg_Dbg(p_dec,"Audio: Error creating expression");
+                    }
+                    if( strcmp(p_sync,"sa") == 0 ){
+                        msg_Dbg(p_dec,"Audio: Syncing");
+                        p_owner->b_sync = true;  
+                    }
+                    msg_Dbg(p_dec,"Audio: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
                 }
-
+                p_owner->b_can_start_new_seg = false;
             }
         }
     }
@@ -2075,7 +2090,9 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
     p_owner->i_last_stream = -1;
     p_owner->i_seg_start = -1;
     p_owner->i_seg_end = -1;
+    p_owner->i_last_played = -1;
     p_owner->b_sync = false;
+    p_owner->b_can_start_new_seg = true;
     p_owner->d_var = 0;
     p_owner->te_vars[0].name = "t";
     p_owner->te_vars[0].address = &p_owner->d_var;
