@@ -151,6 +151,7 @@ struct decoder_owner_sys_t
     mtime_t i_seg_start;
     mtime_t i_seg_end;
     mtime_t i_last_played;
+    mtime_t i_stream_ref;
     bool b_sync;
     bool b_can_start_new_seg;
     double d_var;
@@ -1737,7 +1738,7 @@ static void DecoderApplyMask(decoder_t *p_dec)
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
     vlc_value_t val;
 
-    if(p_owner->paused)
+    if(p_owner->paused) //if user is pausing do nothing
     {
         return;
     }
@@ -1749,12 +1750,17 @@ static void DecoderApplyMask(decoder_t *p_dec)
         mtime_t i_seg_start = p_owner->i_seg_start;
         mtime_t i_seg_end = p_owner->i_seg_end;
         //input_clock_GetStreamLast_video(p_owner->p_clock, &i_last_stream);
-        //msg_Dbg(p_dec,"DecoderApplyMask: Video - i_last_stream = %lld",i_last_stream);
         msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
         if(i_last_stream == -1)
         {
             return;
         }
+        else
+        {
+            if(p_owner->i_stream_ref == -1)
+                p_owner->i_stream_ref = i_last_stream;
+        }
+        i_last_stream = p_owner->i_last_played - p_owner->i_stream_ref;
         if (i_last_stream >= i_seg_start && i_last_stream < i_seg_end)
         {
             // p_owner->b_can_start_new_seg = true;
@@ -1840,12 +1846,17 @@ static void DecoderApplyMask(decoder_t *p_dec)
         mtime_t i_seg_start = p_owner->i_seg_start;
         mtime_t i_seg_end = p_owner->i_seg_end;
         //input_clock_GetStreamLast_audio(p_owner->p_clock, &i_last_stream);
-        //msg_Dbg(p_dec,"DecoderApplyMask: Audio - i_last_stream = %lld",i_last_stream);
         msg_Dbg(p_dec,"Audio - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
         if(i_last_stream == -1)
         {
             return;
         }
+        else
+        {
+            if(p_owner->i_stream_ref == -1)
+                p_owner->i_stream_ref = i_last_stream;
+        }
+        i_last_stream = p_owner->i_last_played - p_owner->i_stream_ref;
         if (i_last_stream >= i_seg_start && i_last_stream < i_seg_end)
         {
             // p_owner->b_can_start_new_seg = true;
@@ -2114,6 +2125,7 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
     p_owner->i_seg_start = -1;
     p_owner->i_seg_end = -1;
     p_owner->i_last_played = -1;
+    p_owner->i_stream_ref = -1;
     p_owner->b_sync = false;
     p_owner->b_can_start_new_seg = true;
     p_owner->d_var = 0;
