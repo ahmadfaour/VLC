@@ -714,6 +714,10 @@ static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
     {
         const int i_src_rate = (int)va_arg( args, int );
         const int i_rate = (int)va_arg( args, int );
+        if(i_rate!=i_src_rate){
+            msg_Err( p_sys->p_input, "Unsupported masking" );
+            return VLC_EGENERIC;
+        }
 
         return es_out_Control(p_sys->p_out,ES_OUT_SET_RATE_VIDEO,i_src_rate,i_rate);
     }
@@ -735,7 +739,10 @@ static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
     {
         const int i_src_rate = (int)va_arg( args, int );
         const int i_rate = (int)va_arg( args, int );
-
+        if(i_rate!=i_src_rate){
+            msg_Err( p_sys->p_input, "Unsupported masking" );
+            return VLC_EGENERIC;
+        }
         return es_out_Control(p_sys->p_out,ES_OUT_SET_RATE_AUDIO,i_src_rate,i_rate);
     }
 

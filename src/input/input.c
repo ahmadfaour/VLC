@@ -2162,6 +2162,24 @@ static bool Control( input_thread_t *p_input,
         case INPUT_CONTROL_SET_RATE_VIDEO:
         {
             long long i_rate = llabs( val.i_int );
+            /* Check rate bound */
+            if( i_rate < INPUT_RATE_MIN )
+            {
+                msg_Dbg( p_input, "cannot set rate faster" );
+                i_rate = INPUT_RATE_MIN;
+            }
+            else if( i_rate > INPUT_RATE_MAX )
+            {
+                msg_Dbg( p_input, "cannot set rate slower" );
+                i_rate = INPUT_RATE_MAX;
+            }
+            if( i_rate != INPUT_RATE_DEFAULT &&
+                ( ( !input_priv(p_input)->b_can_rate_control && !input_priv(p_input)->master->b_rescale_ts ) ||
+                  ( input_priv(p_input)->p_sout && !input_priv(p_input)->b_out_pace_control ) ) )
+            {
+                msg_Dbg( p_input, "cannot change video rate" );
+                i_rate = INPUT_RATE_DEFAULT;
+            }
             const int i_rate_source = (input_priv(p_input)->b_can_pace_control || input_priv(p_input)->b_can_rate_control ) ? i_rate : INPUT_RATE_DEFAULT;
             es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SET_RATE_VIDEO,i_rate_source,i_rate);
             break;
@@ -2192,6 +2210,24 @@ static bool Control( input_thread_t *p_input,
         case INPUT_CONTROL_SET_RATE_AUDIO:
         {
             long long i_rate = llabs( val.i_int );
+            /* Check rate bound */
+            if( i_rate < INPUT_RATE_MIN )
+            {
+                msg_Dbg( p_input, "cannot set rate faster" );
+                i_rate = INPUT_RATE_MIN;
+            }
+            else if( i_rate > INPUT_RATE_MAX )
+            {
+                msg_Dbg( p_input, "cannot set rate slower" );
+                i_rate = INPUT_RATE_MAX;
+            }
+            if( i_rate != INPUT_RATE_DEFAULT &&
+                ( ( !input_priv(p_input)->b_can_rate_control && !input_priv(p_input)->master->b_rescale_ts ) ||
+                  ( input_priv(p_input)->p_sout && !input_priv(p_input)->b_out_pace_control ) ) )
+            {
+                msg_Dbg( p_input, "cannot change audio rate" );
+                i_rate = INPUT_RATE_DEFAULT;
+            }
             const int i_rate_source = (input_priv(p_input)->b_can_pace_control || input_priv(p_input)->b_can_rate_control ) ? i_rate : INPUT_RATE_DEFAULT;
             es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SET_RATE_AUDIO,i_rate_source,i_rate);
             break;
