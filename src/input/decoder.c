@@ -1736,6 +1736,12 @@ static void DecoderApplyMask(decoder_t *p_dec)
 {
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
     vlc_value_t val;
+
+    if(p_owner->paused)
+    {
+        return;
+    }
+
     if (p_dec->fmt_out.i_cat == VIDEO_ES)
     {
         msg_Dbg(p_dec,"Video: DecoderApplyMask");
@@ -1745,9 +1751,13 @@ static void DecoderApplyMask(decoder_t *p_dec)
         //input_clock_GetStreamLast_video(p_owner->p_clock, &i_last_stream);
         //msg_Dbg(p_dec,"DecoderApplyMask: Video - i_last_stream = %lld",i_last_stream);
         msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
+        if(i_last_stream == -1)
+        {
+            return;
+        }
         if (i_last_stream >= i_seg_start && i_last_stream < i_seg_end)
         {
-            p_owner->b_can_start_new_seg = true;
+            // p_owner->b_can_start_new_seg = true;
             p_owner->d_var = i_last_stream;
             const double d_denom = te_eval(p_owner->p_expr);
             msg_Dbg(p_dec,"Video: d_denom= %lf",d_denom);
@@ -1788,9 +1798,9 @@ static void DecoderApplyMask(decoder_t *p_dec)
 
         else
         {
-            if(p_owner->b_can_start_new_seg)
-            {
-                msg_Dbg(p_dec,"Video: Entering new segment");
+            // if(p_owner->b_can_start_new_seg)
+            // {
+                msg_Dbg(p_dec,"Video: Entering else");
                 int err;
                 char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN],\
                     p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN],\
@@ -1814,8 +1824,12 @@ static void DecoderApplyMask(decoder_t *p_dec)
                     }
                     msg_Dbg(p_dec,"Video: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
                 }
-                p_owner->b_can_start_new_seg = false;
-            }
+                else
+                {
+                    msg_Dbg(p_dec,"Video: scanf returned EOF");
+                }
+            //     p_owner->b_can_start_new_seg = false;
+            // }
             
         }
     }
@@ -1827,10 +1841,14 @@ static void DecoderApplyMask(decoder_t *p_dec)
         mtime_t i_seg_end = p_owner->i_seg_end;
         //input_clock_GetStreamLast_audio(p_owner->p_clock, &i_last_stream);
         //msg_Dbg(p_dec,"DecoderApplyMask: Audio - i_last_stream = %lld",i_last_stream);
-        msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
+        msg_Dbg(p_dec,"Audio - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
+        if(i_last_stream == -1)
+        {
+            return;
+        }
         if (i_last_stream >= i_seg_start && i_last_stream < i_seg_end)
         {
-            p_owner->b_can_start_new_seg = true;
+            // p_owner->b_can_start_new_seg = true;
             p_owner->d_var = i_last_stream;
             const double d_denom = te_eval(p_owner->p_expr);
             msg_Dbg(p_dec,"Audio: d_denom= %lf",d_denom);
@@ -1871,9 +1889,9 @@ static void DecoderApplyMask(decoder_t *p_dec)
 
         else
         {
-            if(p_owner->b_can_start_new_seg)
-            {
-                msg_Dbg(p_dec,"Audio: Entering new segment");
+            msg_Dbg(p_dec,"Video: Entering else");
+            // if(p_owner->b_can_start_new_seg)
+            // {
                 int err;
                 char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN], p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN], p_sync[MAX_LINE_LEN];
                 if(p_owner->p_expr)
@@ -1895,8 +1913,13 @@ static void DecoderApplyMask(decoder_t *p_dec)
                     }
                     msg_Dbg(p_dec,"Audio: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
                 }
-                p_owner->b_can_start_new_seg = false;
-            }
+                else
+                {
+                    msg_Dbg(p_dec,"Audio: scanf returned EOF");
+                }
+                
+            //     p_owner->b_can_start_new_seg = false;
+            // }
         }
     }
 }
