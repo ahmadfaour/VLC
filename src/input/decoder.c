@@ -162,6 +162,7 @@ struct decoder_owner_sys_t
     te_variable te_vars[1];
     te_expr *p_expr;
     FILE *p_maskfile;
+    FILE *p_maskeditor;
 };
 
 /* Pictures which are DECODER_BOGUS_VIDEO_DELAY or more in advance probably have
@@ -1717,7 +1718,6 @@ static void DecoderApplyMask(decoder_t *p_dec)
                     p_owner->p_expr = te_compile(p_video_func,p_owner->te_vars,1,&err);
                     if(err){
                         msg_Dbg(p_dec,"Video: Error creating expression");
-                        msg_Dbg(p_dec,"\t%*s^\nError near here", err-1, "");
                         
                     }
                     if( strcmp(p_sync,"sv") == 0 ){
@@ -1856,6 +1856,13 @@ static void DecoderApplyMask(decoder_t *p_dec)
     }
 }
 
+void DecoderEditMask(decoder_t *p_dec)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    mtime_t i_last_stream = p_owner->i_last_played;
+    fprintf(p_owner->p_maskeditor,"%lld\n%lld ",i_last_stream,i_last_stream);
+    msg_Dbg(p_dec,"Decoder: writiing in file");
+}
 /**
  * The decoding main loop
  *
@@ -1870,7 +1877,7 @@ static void *DecoderThread(void *p_data)
     /* The decoder's main loop */
     vlc_fifo_Lock(p_owner->p_fifo);
     vlc_fifo_CleanupPush(p_owner->p_fifo);
-
+    
     for (;;)
     {
         if(p_owner->p_maskfile)
@@ -2071,6 +2078,28 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
             return NULL;
         }
     }
+
+    
+    char *psz_editor_path = var_InheritString(p_dec, "maskgen");
+    // msg_Dbg(p_dec,"Decoder: path is %s",psz_editor_path);
+    if (strcmp(psz_editor_path, "none") == 0)
+    {
+        p_owner->p_maskeditor = NULL;
+        // msg_Dbg(p_dec,"maskeditor file is null");
+    }
+    else
+    {
+        p_owner->p_maskeditor = fopen(psz_editor_path, "w");
+        if (unlikely(p_owner->p_maskeditor == NULL))
+        {
+            free(p_owner);
+            vlc_object_release(p_dec);
+            return NULL;
+        }
+        fprintf(p_owner->p_maskeditor,"0 ");
+        // msg_Dbg(p_dec,"maskeditor file is opened");
+    }
+
     //**********
     es_format_Init(&p_owner->fmt, fmt->i_cat, 0);
 
@@ -2185,6 +2214,7 @@ static void DeleteDecoder(decoder_t *p_dec)
     msg_Dbg(p_dec, "killing decoder fourcc `%4.4s'",
             (char *)&p_dec->fmt_in.i_codec);
 
+    msg_Dbg(p_dec, "Closing Files - Cleanup");
     const bool b_flush_spu = p_dec->fmt_out.i_cat == SPU_ES;
     UnloadDecoder(p_dec);
 
@@ -2196,6 +2226,11 @@ static void DeleteDecoder(decoder_t *p_dec)
     if (p_owner->p_maskfile)
     {
         fclose(p_owner->p_maskfile);
+    }
+    if (p_owner->p_maskeditor)
+    {
+        fclose(p_owner->p_maskeditor);
+        
     }
     if (p_owner->p_aout)
     {
@@ -2625,6 +2660,15 @@ void input_DecoderChangePause(decoder_t *p_dec, bool b_paused, mtime_t i_date)
      * while the input is paused (e.g. add sub file), then b_paused is
      * (incorrectly) false. FIXME: This is a bug in the decoder owner. */
     vlc_fifo_Lock(p_owner->p_fifo);
+    msg_Dbg(p_dec, "Decoder: ChangePause");
+    msg_Dbg(p_dec, "p_owner->paused = %d, b_paused = %d",p_owner->paused,b_paused);
+    if(p_owner->p_maskeditor && !p_owner->paused && b_paused)
+    {
+        msg_Dbg(p_dec, "Decoder: before editmask");
+        DecoderEditMask(p_dec);
+        msg_Dbg(p_dec, "Decoder: after editmask");
+    }
+
     p_owner->paused = b_paused;
     p_owner->pause_date = i_date;
     p_owner->frames_countdown = 0;
