@@ -2081,11 +2081,9 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
 
     
     char *psz_editor_path = var_InheritString(p_dec, "maskgen");
-    // msg_Dbg(p_dec,"Decoder: path is %s",psz_editor_path);
     if (strcmp(psz_editor_path, "none") == 0)
     {
         p_owner->p_maskeditor = NULL;
-        // msg_Dbg(p_dec,"maskeditor file is null");
     }
     else
     {
@@ -2097,7 +2095,6 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
             return NULL;
         }
         fprintf(p_owner->p_maskeditor,"0 ");
-        // msg_Dbg(p_dec,"maskeditor file is opened");
     }
 
     //**********
@@ -2229,6 +2226,7 @@ static void DeleteDecoder(decoder_t *p_dec)
     }
     if (p_owner->p_maskeditor)
     {
+        fprintf(p_owner->p_maskeditor,"%lld",p_owner->i_last_played);
         fclose(p_owner->p_maskeditor);
         
     }
