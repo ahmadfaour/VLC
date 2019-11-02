@@ -157,10 +157,6 @@ struct decoder_owner_sys_t
     mtime_t i_last_rate_update;
     bool b_paused_mask;
     bool b_sync;
-    bool b_can_start_new_seg;
-    double d_var;
-    te_variable te_vars[1];
-    te_expr *p_expr;
     char psz_rate_func[MAX_LINE_LEN];
     FILE *p_maskfile;
     FILE *p_maskeditor;
@@ -1687,9 +1683,9 @@ static void DecoderApplyMask(decoder_t *p_dec)
                     }
                 }
             }
-            p_owner->d_var = (double)i_last_stream/MICRO_SEC_FACTOR;
-            msg_Dbg(p_dec,"Video: d_var is: %lf",p_owner->d_var);
-            const double d_denom = CalcRate(p_owner->psz_rate_func,p_owner->d_var,p_dec);
+            double t = (double)i_last_stream/MICRO_SEC_FACTOR;
+            msg_Dbg(p_dec,"Video: d_var is: %lf",t);
+            const double d_denom = CalcRate(p_owner->psz_rate_func,t,p_dec);
             msg_Dbg(p_dec,"Video: d_denom= %lf",d_denom);
             if(d_denom != 0 && p_owner->b_paused_mask == false)
             {
@@ -1785,9 +1781,9 @@ static void DecoderApplyMask(decoder_t *p_dec)
                     }
                 }
             }
-            p_owner->d_var = (double)i_last_stream/MICRO_SEC_FACTOR;
-            msg_Dbg(p_dec,"Audio: d_var is: %lf", p_owner->d_var);
-            const double d_denom = CalcRate(p_owner->psz_rate_func,p_owner->d_var,p_dec);
+            double t = (double)i_last_stream/MICRO_SEC_FACTOR;
+            msg_Dbg(p_dec,"Audio: d_var is: %lf", t);
+            const double d_denom = CalcRate(p_owner->psz_rate_func,t,p_dec);
             msg_Dbg(p_dec,"Audio: d_denom= %lf",d_denom);
             if(d_denom != 0 && p_owner->b_paused_mask == false)
             {
@@ -2046,11 +2042,6 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
     p_owner->i_last_rate_update = -1;
     p_owner->b_paused_mask = false;
     p_owner->b_sync = false;
-    p_owner->b_can_start_new_seg = true;
-    p_owner->d_var = 0;
-    p_owner->te_vars[0].name = "t";
-    p_owner->te_vars[0].address = &p_owner->d_var;
-    p_owner->p_expr = NULL;
 
     char *psz_path = var_InheritString(p_dec, "mask");
     if (strcmp(psz_path, "none") == 0)
