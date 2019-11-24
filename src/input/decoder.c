@@ -157,6 +157,7 @@ struct decoder_owner_sys_t
     mtime_t i_last_rate_update;
     bool b_paused_mask;
     bool b_sync;
+    bool b_sync_after_pause;
     char psz_rate_func[MAX_LINE_LEN];
     FILE *p_maskfile;
     FILE *p_maskeditor;
@@ -1627,7 +1628,43 @@ static double CalcRate(char* expression,double t, decoder_t *p_logger)
         return -1;
     }
 }
+static void DecoderInsertNewSegVideo(decoder_t *p_dec, char p_start[MAX_LINE_LEN],char p_end[MAX_LINE_LEN],char p_audio_func[MAX_LINE_LEN],char p_video_func[MAX_LINE_LEN],char p_sync[MAX_LINE_LEN],char p_audio_pause[MAX_LINE_LEN], char p_video_pause[MAX_LINE_LEN])
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    msg_Dbg(p_dec,"Video: Read new segment");
+    p_owner->i_seg_start = atoi(p_start);
+    p_owner->i_seg_end = atoi(p_end);  
+    strcpy(p_owner->psz_rate_func,p_video_func);
+    if( strcmp(p_sync,"sv") == 0 ){
+        msg_Dbg(p_dec,"Video: Syncing");
+        p_owner->b_sync = true; 
+    }
+    if( strcmp(p_video_pause,"-") != 0 ){
+        p_owner->i_pausing_period = atoi(p_video_pause) * MICRO_SEC_FACTOR;
+        p_owner->b_paused_mask = true;
+    }
+    msg_Dbg(p_dec,"Video: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
 
+}
+
+static void DecoderInsertNewSegAudio(decoder_t *p_dec, char p_start[MAX_LINE_LEN],char p_end[MAX_LINE_LEN],char p_audio_func[MAX_LINE_LEN],char p_video_func[MAX_LINE_LEN],char p_sync[MAX_LINE_LEN],char p_audio_pause[MAX_LINE_LEN], char p_video_pause[MAX_LINE_LEN])
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+    msg_Dbg(p_dec,"Audio: Read new segment");
+    p_owner->i_seg_start = atoi(p_start);
+    p_owner->i_seg_end = atoi(p_end);  
+    strcpy(p_owner->psz_rate_func,p_audio_func);
+    if( strcmp(p_sync,"sa") == 0 ){
+        msg_Dbg(p_dec,"Audio: Syncing");
+        p_owner->b_sync = true;  
+    }
+    if( strcmp(p_audio_pause,"-") != 0 ){
+        p_owner->i_pausing_period = atoi(p_audio_pause) * MICRO_SEC_FACTOR;
+        p_owner->b_paused_mask = true;
+    }
+    msg_Dbg(p_dec,"Audio: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
+
+}
 static void DecoderApplyMask(decoder_t *p_dec)
 {
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
@@ -1645,6 +1682,9 @@ static void DecoderApplyMask(decoder_t *p_dec)
         mtime_t i_last_stream = p_owner->i_last_played;
         mtime_t i_seg_start = p_owner->i_seg_start;
         mtime_t i_seg_end = p_owner->i_seg_end;
+        char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN],\
+                    p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN],\
+                    p_sync[MAX_LINE_LEN],p_audio_pause[MAX_LINE_LEN], p_video_pause[MAX_LINE_LEN];
         msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
         if(i_last_stream == -1)
         {
@@ -1708,33 +1748,36 @@ static void DecoderApplyMask(decoder_t *p_dec)
             }
             p_owner->i_last_stream = i_last_stream;
         }
+        else if (i_last_stream < i_seg_start)
+        {
+            msg_Dbg(p_dec,"Video:Entering seek");
+            fseek(p_owner->p_maskfile,0,SEEK_SET);
+            while(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF)
+            {
+                int i_start = atoi(p_start);
+                int i_end = atoi(p_end);
+                if (i_last_stream >= i_start && i_last_stream < i_end)
+                {
+                    msg_Dbg(p_dec,"Video: found from seek");
+                    break;
+                }
+                
+            }
+            DecoderInsertNewSegVideo(p_dec,p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause);
+            p_owner->i_last_stream = i_last_stream;
+        }
 
         else
         {
-                msg_Dbg(p_dec,"Video: Entering else");
-                int err;
-                char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN],\
-                    p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN],\
-                    p_sync[MAX_LINE_LEN],p_audio_pause[MAX_LINE_LEN], p_video_pause[MAX_LINE_LEN];
-                if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF){
-                    msg_Dbg(p_dec,"Video: Read new segment");
-                    p_owner->i_seg_start = atoi(p_start);
-                    p_owner->i_seg_end = atoi(p_end);  
-                    strcpy(p_owner->psz_rate_func,p_video_func);
-                    if( strcmp(p_sync,"sv") == 0 ){
-                        msg_Dbg(p_dec,"Video: Syncing");
-                        p_owner->b_sync = true; 
-                    }
-                    if( strcmp(p_video_pause,"-") != 0 ){
-                        p_owner->i_pausing_period = atoi(p_video_pause) * MICRO_SEC_FACTOR;
-                        p_owner->b_paused_mask = true;
-                    }
-                    msg_Dbg(p_dec,"Video: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
-                }
-                else
-                {
-                    msg_Dbg(p_dec,"Video: scanf returned EOF");
-                }
+            msg_Dbg(p_dec,"Video: Entering else");
+            int err;
+            if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF){
+                DecoderInsertNewSegVideo(p_dec,p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause);
+            }
+            else
+            {
+                msg_Dbg(p_dec,"Video: scanf returned EOF");
+            }
         }
     }
     else //AUDIO_ES or SPU_ES
@@ -1743,6 +1786,9 @@ static void DecoderApplyMask(decoder_t *p_dec)
         mtime_t i_last_stream = p_owner->i_last_played;
         mtime_t i_seg_start = p_owner->i_seg_start;
         mtime_t i_seg_end = p_owner->i_seg_end;
+        char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN], p_audio_func[MAX_LINE_LEN],\
+                     p_video_func[MAX_LINE_LEN], p_sync[MAX_LINE_LEN], p_audio_pause[MAX_LINE_LEN],\
+                     p_video_pause[MAX_LINE_LEN];
         msg_Dbg(p_dec,"Audio - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
         if(i_last_stream == -1)
         {
@@ -1806,33 +1852,35 @@ static void DecoderApplyMask(decoder_t *p_dec)
             }
             p_owner->i_last_stream = i_last_stream;
         }
+        else if(i_last_stream < i_seg_start)
+        {
+            msg_Dbg(p_dec,"Audio: Entering seek");
+            fseek(p_owner->p_maskfile,0,SEEK_SET);
+            while(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause))
+            {
+                int i_start = atoi(p_start);
+                int i_end = atoi(p_end);
+                if (i_last_stream >= i_start && i_last_stream < i_end){
+                    msg_Dbg(p_dec,"Audio: found from seek");
+                    break;
+                }
+                
+            }
+            DecoderInsertNewSegAudio(p_dec,p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause);
+            p_owner->i_last_stream = i_last_stream;
+        }
 
         else
         {
             msg_Dbg(p_dec,"Audio: Entering else");
-                int err;
-                char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN], p_audio_func[MAX_LINE_LEN],\
-                     p_video_func[MAX_LINE_LEN], p_sync[MAX_LINE_LEN], p_audio_pause[MAX_LINE_LEN],\
-                     p_video_pause[MAX_LINE_LEN];
-                if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF){
-                    msg_Dbg(p_dec,"Audio: Read new segment");
-                    p_owner->i_seg_start = atoi(p_start);
-                    p_owner->i_seg_end = atoi(p_end);  
-                    strcpy(p_owner->psz_rate_func,p_audio_func);
-                    if( strcmp(p_sync,"sa") == 0 ){
-                        msg_Dbg(p_dec,"Audio: Syncing");
-                        p_owner->b_sync = true;  
-                    }
-                    if( strcmp(p_audio_pause,"-") != 0 ){
-                        p_owner->i_pausing_period = atoi(p_audio_pause) * MICRO_SEC_FACTOR;
-                        p_owner->b_paused_mask = true;
-                    }
-                    msg_Dbg(p_dec,"Audio: start=%s end=%s audio=%s video=%s sync=%s",p_start,p_end,p_audio_func,p_video_func,p_sync);
-                }
-                else
-                {
-                    msg_Dbg(p_dec,"Audio: scanf returned EOF");
-                }
+            int err;
+            if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF){
+                DecoderInsertNewSegAudio(p_dec,p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause);
+            }
+            else
+            {
+                msg_Dbg(p_dec,"Audio: scanf returned EOF");
+            }
         }
     }
 }
@@ -2042,6 +2090,7 @@ static decoder_t *CreateDecoder(vlc_object_t *p_parent,
     p_owner->i_last_rate_update = -1;
     p_owner->b_paused_mask = false;
     p_owner->b_sync = false;
+    p_owner->b_sync_after_pause = false;
 
     char *psz_path = var_InheritString(p_dec, "mask");
     if (strcmp(psz_path, "none") == 0)
