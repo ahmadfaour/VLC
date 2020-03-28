@@ -1625,20 +1625,26 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
     decoder_owner_sys_t *p_owner = p_dec->p_owner;
     vlc_value_t val;
 
+    char psz_es_type[MAX_LINE_LEN];
+    if(p_dec->fmt_out.i_cat==VIDEO_ES)
+        sprintf(psz_es_type,"Video");
+    else
+        sprintf(psz_es_type,"Audio");
+    
     if(p_owner->paused && !p_owner->b_paused_mask) //if user is pausing do nothing
     {
         msg_Dbg(p_dec,"User paused");
         return;
     }
 
-    msg_Dbg(p_dec,"Video: DecoderApplyMask");
+    msg_Dbg(p_dec,"%s: DecoderApplyMask",psz_es_type);
     mtime_t i_last_stream = p_owner->i_last_played;
     mtime_t i_seg_start = p_owner->i_seg_start;
     mtime_t i_seg_end = p_owner->i_seg_end;
     char p_start[MAX_LINE_LEN], p_end[MAX_LINE_LEN],\
                 p_audio_func[MAX_LINE_LEN], p_video_func[MAX_LINE_LEN],\
                 p_sync[MAX_LINE_LEN],p_audio_pause[MAX_LINE_LEN], p_video_pause[MAX_LINE_LEN];
-    msg_Dbg(p_dec,"Video - i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",i_seg_start,i_seg_end,i_last_stream);
+    msg_Dbg(p_dec,"%s: i_seg_start = %lld, i_seg_end = %lld,i_last_stream = %lld",psz_es_type,i_seg_start,i_seg_end,i_last_stream);
     if(i_last_stream == -1)
     {
         return;
@@ -1656,7 +1662,7 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
             if( p_owner->i_pause_start == -1 || !p_owner->paused)
             {
                 p_owner->i_pause_start = mdate();
-                msg_Dbg(p_dec,"Video: pausing");
+                msg_Dbg(p_dec,"%s: pausing",psz_es_type);
                 val.i_int = PAUSE_S;
                 DecoderControlPush(p_dec,commands[STATE_CMD],&val);
                 val.i_int = INPUT_RATE_DEFAULT;
@@ -1667,7 +1673,7 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
                 time_t i_pause_duration = mdate() - p_owner->i_pause_start;
                 if( i_pause_duration >= p_owner->i_pausing_period )
                 {
-                    msg_Dbg(p_dec,"Video: unpausing");
+                    msg_Dbg(p_dec,"%s: unpausing",psz_es_type);
                     p_owner->b_paused_mask = false;
                     p_owner->i_pause_start = -1;
                     p_owner->i_pausing_period = -1; 
@@ -1677,17 +1683,15 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
             }
         }
         double t = (double)i_last_stream/MICRO_SEC;
-        msg_Dbg(p_dec,"Video: d_var is: %lf",t);
         const double d_denom = CalcRate(p_owner->psz_rate_func,t,p_dec);
-        msg_Dbg(p_dec,"Video: d_denom= %lf",d_denom);
         if(d_denom != 0 && p_owner->b_paused_mask == false)
         {
-            msg_Dbg(p_dec,"Video: after d_denom");
+            msg_Dbg(p_dec,"%s: after d_denom",psz_es_type);
             mtime_t i_delta = mdate() - p_owner->i_last_rate_update;
-            msg_Dbg(p_dec,"Video: Delta = %lld, i_last_rate_update = %lld",i_delta,p_owner->i_last_rate_update);
+            msg_Dbg(p_dec,"%s: Delta = %lld, i_last_rate_update = %lld",psz_es_type,i_delta,p_owner->i_last_rate_update);
             if(i_delta >= (RATE_UPDATE_INTERVAL*MICRO_SEC))
             {
-                msg_Dbg(p_dec,"Video: Changing speed");
+                msg_Dbg(p_dec,"%s: Changing speed",psz_es_type);
                 p_owner->i_last_rate_update = mdate();
                 int i_rate = INPUT_RATE_DEFAULT / d_denom;
                 val.i_int = i_rate;
@@ -1696,6 +1700,7 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
         } 
         if(p_owner->i_last_stream <= i_seg_start && p_owner->b_sync)
         {
+            msg_Dbg(p_dec,"%s: SYNC",psz_es_type);
             DecoderControlPush(p_dec,commands[SYNC_CMD],NULL);
             p_owner->b_sync = false;
         }
@@ -1703,7 +1708,7 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
     }
     else if (i_last_stream < i_seg_start)
     {
-        msg_Dbg(p_dec,"Video:Entering seek");
+        msg_Dbg(p_dec,"%s: Entering seek",psz_es_type);
         fseek(p_owner->p_maskfile,0,SEEK_SET);
         while(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF)
         {
@@ -1711,7 +1716,7 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
             int i_end = atoi(p_end);
             if (i_last_stream >= i_start && i_last_stream < i_end)
             {
-                msg_Dbg(p_dec,"Video: found from seek");
+                msg_Dbg(p_dec,"%s: found from seek",psz_es_type);
                 break;
             }
             
@@ -1722,14 +1727,14 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
 
     else
     {
-        msg_Dbg(p_dec,"Video: Entering else");
+        msg_Dbg(p_dec,"%s Entering else");
         int err;
         if(fscanf(p_owner->p_maskfile,"%s %s %s %s %s %s %s\n",p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause) != EOF){
             DecoderStoreNewSeg(p_dec,p_start,p_end,p_audio_func,p_video_func,p_sync,p_audio_pause,p_video_pause);
         }
         else
         {
-            msg_Dbg(p_dec,"Video: scanf returned EOF");
+            msg_Dbg(p_dec,"%s scanf returned EOF");
         }
     }
 }
