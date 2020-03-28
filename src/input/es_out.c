@@ -610,7 +610,7 @@ static void EsOutProgramChangePauseVideo( es_out_t *out, bool b_paused, mtime_t 
 {
     es_out_sys_t *p_sys = out->p_sys;
 
-    for( int i = 0; i < p_sys->i_pgrm; i++ ) //what is a program?
+    for( int i = 0; i < p_sys->i_pgrm; i++ )
         input_clock_ChangePause_video( p_sys->pgrm[i]->p_clock, b_paused, i_date );
 }
 static void EsOutDecodersChangePauseVideo( es_out_t *out, bool b_paused, mtime_t i_date )
@@ -625,23 +625,13 @@ static void EsOutDecodersChangePauseVideo( es_out_t *out, bool b_paused, mtime_t
         if( es->p_dec && es->p_dec->fmt_out.i_cat == VIDEO_ES)
         {
             input_DecoderChangePause( es->p_dec, b_paused, i_date );
-            // if( es->p_dec_record )
-            //     input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
         }
     }
 }
 static void EsOutChangePauseVideo( es_out_t *out, bool b_paused, mtime_t i_date )
 {
-    if(b_paused)
-    {
-        EsOutDecodersChangePauseVideo( out, true, i_date );
-        EsOutProgramChangePauseVideo( out, true, i_date );
-    }
-    else
-    {
-        EsOutDecodersChangePauseVideo( out, false, i_date );
-        EsOutProgramChangePauseVideo( out, false, i_date );
-    }
+    EsOutDecodersChangePauseVideo( out, b_paused, i_date );
+    EsOutProgramChangePauseVideo( out, b_paused, i_date );
 }
 static void EsOutSyncVideo(es_out_t *out)
 {
@@ -654,12 +644,6 @@ static void EsOutSyncVideo(es_out_t *out)
         if( p_es->p_dec != NULL && p_es->p_dec->fmt_out.i_cat == VIDEO_ES)
         {
             input_DecoderFlush( p_es->p_dec );
-            // if( !p_sys->b_buffering )
-            // {
-            //     input_DecoderStartWait( p_es->p_dec );
-            //     if( p_es->p_dec_record != NULL )
-            //         input_DecoderStartWait( p_es->p_dec_record );
-            // }
         }
     }
 
@@ -680,7 +664,7 @@ static void EsOutProgramChangePauseAudio( es_out_t *out, bool b_paused, mtime_t 
 {
     es_out_sys_t *p_sys = out->p_sys;
 
-    for( int i = 0; i < p_sys->i_pgrm; i++ ) //what is a program?
+    for( int i = 0; i < p_sys->i_pgrm; i++ )
         input_clock_ChangePause_audio( p_sys->pgrm[i]->p_clock, b_paused, i_date );
 }
 static void EsOutDecodersChangePauseAudio( es_out_t *out, bool b_paused, mtime_t i_date )
@@ -695,23 +679,13 @@ static void EsOutDecodersChangePauseAudio( es_out_t *out, bool b_paused, mtime_t
         if( es->p_dec && es->p_dec->fmt_out.i_cat == AUDIO_ES)
         {
             input_DecoderChangePause( es->p_dec, b_paused, i_date );
-            // if( es->p_dec_record )
-            //     input_DecoderChangePause( es->p_dec_record, b_paused, i_date );
         }
     }
 }
 static void EsOutChangePauseAudio( es_out_t *out, bool b_paused, mtime_t i_date )
 {
-    if(b_paused)
-    {
-        EsOutDecodersChangePauseAudio( out, true, i_date );
-        EsOutProgramChangePauseAudio( out, true, i_date );
-    }
-    else
-    {
-        EsOutDecodersChangePauseAudio( out, false, i_date );
-        EsOutProgramChangePauseAudio( out, false, i_date );
-    }
+    EsOutDecodersChangePauseAudio( out, b_paused, i_date );
+    EsOutProgramChangePauseAudio( out, b_paused, i_date );
 }
 static void EsOutSyncAudio(es_out_t *out)
 {
@@ -724,12 +698,6 @@ static void EsOutSyncAudio(es_out_t *out)
         if( p_es->p_dec != NULL && p_es->p_dec->fmt_out.i_cat == AUDIO_ES)
         {
             input_DecoderFlush( p_es->p_dec );
-            // if( !p_sys->b_buffering )
-            // {
-            //     input_DecoderStartWait( p_es->p_dec );
-            //     if( p_es->p_dec_record != NULL )
-            //         input_DecoderStartWait( p_es->p_dec_record );
-            // }
         }
     }
 
