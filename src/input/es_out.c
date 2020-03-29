@@ -649,6 +649,13 @@ static void EsOutSyncVideo(es_out_t *out, mtime_t i_ts)
 
     for( int i = 0; i < p_sys->i_pgrm; i++ )
         input_clock_Reset( p_sys->pgrm[i]->p_clock );
+    
+    p_sys->b_buffering = true;
+    p_sys->i_buffering_extra_initial = 0;
+    p_sys->i_buffering_extra_stream = 0;
+    p_sys->i_buffering_extra_system = 0;
+    p_sys->i_preroll_end = -1;
+    p_sys->i_prev_stream_level = -1;
 }
 /**************************/
 
@@ -703,6 +710,13 @@ static void EsOutSyncAudio(es_out_t *out,mtime_t i_ts)
 
     for( int i = 0; i < p_sys->i_pgrm; i++ )
         input_clock_Reset( p_sys->pgrm[i]->p_clock );
+    
+    p_sys->b_buffering = true;
+    p_sys->i_buffering_extra_initial = 0;
+    p_sys->i_buffering_extra_stream = 0;
+    p_sys->i_buffering_extra_system = 0;
+    p_sys->i_preroll_end = -1;
+    p_sys->i_prev_stream_level = -1;
 }
 
 //***************************************

@@ -576,7 +576,7 @@ VLC_API block_t *vlc_fifo_DequeueUnlocked(vlc_fifo_t *) VLC_USED;
  */
 VLC_API block_t *vlc_fifo_DequeueAllUnlocked(vlc_fifo_t *) VLC_USED;
 
-VLC_API void vlc_fifo_DequeueAllUnlockedBeforeTs(block_fifo_t *fifo,int64_t i_ts) VLC_USED;
+void vlc_fifo_DequeueAllUnlockedBeforeTs(block_fifo_t *fifo,int64_t i_ts);
 
 /**
  * Counts blocks in a FIFO.
