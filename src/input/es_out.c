@@ -633,7 +633,7 @@ static void EsOutChangePauseVideo( es_out_t *out, bool b_paused, mtime_t i_date 
     EsOutDecodersChangePauseVideo( out, b_paused, i_date );
     EsOutProgramChangePauseVideo( out, b_paused, i_date );
 }
-static void EsOutSyncVideo(es_out_t *out)
+static void EsOutSyncVideo(es_out_t *out, mtime_t i_ts)
 {
     es_out_sys_t      *p_sys = out->p_sys;
 
@@ -641,9 +641,9 @@ static void EsOutSyncVideo(es_out_t *out)
     {
         es_out_id_t *p_es = p_sys->es[i];
 
-        if( p_es->p_dec != NULL && p_es->p_dec->fmt_out.i_cat == VIDEO_ES)
+        if( p_es->p_dec != NULL /*&& p_es->p_dec->fmt_out.i_cat == VIDEO_ES*/)
         {
-            input_DecoderFlush( p_es->p_dec );
+            input_DecoderFlushBeforeTs( p_es->p_dec, i_ts);
         }
     }
 
@@ -687,7 +687,7 @@ static void EsOutChangePauseAudio( es_out_t *out, bool b_paused, mtime_t i_date 
     EsOutDecodersChangePauseAudio( out, b_paused, i_date );
     EsOutProgramChangePauseAudio( out, b_paused, i_date );
 }
-static void EsOutSyncAudio(es_out_t *out)
+static void EsOutSyncAudio(es_out_t *out,mtime_t i_ts)
 {
     es_out_sys_t      *p_sys = out->p_sys;
 
@@ -695,9 +695,9 @@ static void EsOutSyncAudio(es_out_t *out)
     {
         es_out_id_t *p_es = p_sys->es[i];
 
-        if( p_es->p_dec != NULL && p_es->p_dec->fmt_out.i_cat == AUDIO_ES)
+        if( p_es->p_dec != NULL /*&& p_es->p_dec->fmt_out.i_cat == AUDIO_ES*/)
         {
-            input_DecoderFlush( p_es->p_dec );
+            input_DecoderFlushBeforeTs( p_es->p_dec,i_ts );
         }
     }
 
@@ -2939,7 +2939,9 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
     
     case ES_OUT_SYNC_VIDEO:
     {
-        EsOutSyncVideo(out);
+        const mtime_t i_ts = va_arg( args, mtime_t );
+        msg_Dbg( p_sys->p_input, "ES_OUT_SYNC_VIDEO: i_ts=%lld",i_ts);
+        EsOutSyncVideo(out,i_ts);
         return VLC_SUCCESS;
     }
     /**********************/
@@ -2968,7 +2970,9 @@ static int EsOutControlLocked( es_out_t *out, int i_query, va_list args )
     
     case ES_OUT_SYNC_AUDIO:
     {
-        EsOutSyncAudio(out);
+        const mtime_t i_ts = va_arg( args, mtime_t );
+        msg_Dbg( p_sys->p_input, "ES_OUT_SYNC_AUDIO: i_ts=%lld",i_ts);
+        EsOutSyncAudio(out,i_ts);
         return VLC_SUCCESS;
     }
 

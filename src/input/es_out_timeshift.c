@@ -732,7 +732,8 @@ static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
     }
     case ES_OUT_SYNC_VIDEO:
     {
-        return es_out_Control(p_sys->p_out,ES_OUT_SYNC_VIDEO);
+        const mtime_t i_ts = (mtime_t) va_arg( args, mtime_t );
+        return es_out_Control(p_sys->p_out,ES_OUT_SYNC_VIDEO,i_ts);
     }
     /****************/
     case ES_OUT_SET_RATE_AUDIO:
@@ -756,7 +757,8 @@ static int ControlLocked( es_out_t *p_out, int i_query, va_list args )
     }
     case ES_OUT_SYNC_AUDIO:
     {
-        return es_out_Control(p_sys->p_out,ES_OUT_SYNC_AUDIO);
+        const mtime_t i_ts = (mtime_t) va_arg( args, mtime_t );
+        return es_out_Control(p_sys->p_out,ES_OUT_SYNC_AUDIO,i_ts);
     }
 
     //************************************************************

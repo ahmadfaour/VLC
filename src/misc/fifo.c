@@ -127,6 +127,47 @@ block_t *vlc_fifo_DequeueUnlocked(block_fifo_t *fifo)
     return block;
 }
 
+void vlc_fifo_DequeueAllUnlockedBeforeTs(block_fifo_t *fifo,mtime_t i_ts)
+{
+    vlc_assert_locked(&fifo->lock);
+
+    block_t *block = fifo->p_first;
+
+    while(block!=NULL){
+        if(block->i_pts<i_ts){
+            fifo->p_first = block->p_next;
+            if (block->p_next == NULL)
+                fifo->pp_last = &fifo->p_first;
+            block->p_next = NULL;
+            assert(fifo->i_depth > 0);
+            fifo->i_depth--;
+            assert(fifo->i_size >= block->i_buffer);
+            fifo->i_size -= block->i_buffer;
+            block_Release(block);
+            block = fifo->p_first;
+        }
+        else{
+            return;
+        }
+        
+    }
+
+    // if (block == NULL)
+    //     return NULL; /* Nothing to do */
+
+    // fifo->p_first = block->p_next;
+    // if (block->p_next == NULL)
+    //     fifo->pp_last = &fifo->p_first;
+    // block->p_next = NULL;
+
+    // assert(fifo->i_depth > 0);
+    // fifo->i_depth--;
+    // assert(fifo->i_size >= block->i_buffer);
+    // fifo->i_size -= block->i_buffer;
+
+    // return block;
+}
+
 block_t *vlc_fifo_DequeueAllUnlocked(block_fifo_t *fifo)
 {
     vlc_assert_locked(&fifo->lock);

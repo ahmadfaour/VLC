@@ -2203,7 +2203,8 @@ static bool Control( input_thread_t *p_input,
         }
         case INPUT_CONTROL_SYNC_VIDEO:
         {
-            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SYNC_VIDEO);
+            const mtime_t i_ts = (mtime_t)val.i_int;
+            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SYNC_VIDEO,i_ts);
             break;
         }
         /*************************/
@@ -2251,7 +2252,8 @@ static bool Control( input_thread_t *p_input,
         }
         case INPUT_CONTROL_SYNC_AUDIO:
         {
-            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SYNC_AUDIO);
+            const mtime_t i_ts = (mtime_t)val.i_int;
+            es_out_Control(input_priv(p_input)->p_es_out,ES_OUT_SYNC_AUDIO,i_ts);
             break;
         }
 

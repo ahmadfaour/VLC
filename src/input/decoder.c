@@ -62,8 +62,8 @@
 #define STATE_CMD 1
 #define SYNC_CMD 2
 #define RATE_UPDATE_INTERVAL 0.5
-#define SYNC_AUDIO_FLAG "sa"
-#define SYNC_VIDEO_FLAG "sv"
+#define SYNC_AUDIO_FLAG "s"
+#define SYNC_VIDEO_FLAG "s"
 #define EMPTY_FLAG "-"
 /*
  * Possibles values set in p_owner->reload atomic
@@ -1701,7 +1701,8 @@ static void DecoderApplyMask(decoder_t *p_dec,int* commands){
         if(p_owner->i_last_stream <= i_seg_start && p_owner->b_sync)
         {
             msg_Dbg(p_dec,"%s: SYNC",psz_es_type);
-            DecoderControlPush(p_dec,commands[SYNC_CMD],NULL);
+            val.i_int = i_seg_start;
+            DecoderControlPush(p_dec,commands[SYNC_CMD],&val);
             p_owner->b_sync = false;
         }
         p_owner->i_last_stream = i_last_stream;
@@ -2414,6 +2415,32 @@ void input_DecoderFlush(decoder_t *p_dec)
 
     /* Empty the fifo */
     block_ChainRelease(vlc_fifo_DequeueAllUnlocked(p_owner->p_fifo));
+
+    /* Don't need to wait for the DecoderThread to flush. Indeed, if called a
+     * second time, this function will clear the FIFO again before anything was
+     * dequeued by DecoderThread and there is no need to flush a second time in
+     * a row. */
+    p_owner->flushing = true;
+
+    /* Flush video/spu decoder when paused: increment frames_countdown in order
+     * to display one frame/subtitle */
+    if (p_owner->paused && (p_owner->fmt.i_cat == VIDEO_ES || p_owner->fmt.i_cat == SPU_ES) && p_owner->frames_countdown == 0)
+        p_owner->frames_countdown++;
+
+    vlc_fifo_Signal(p_owner->p_fifo);
+    vlc_cond_signal(&p_owner->wait_timed);
+
+    vlc_fifo_Unlock(p_owner->p_fifo);
+}
+
+void input_DecoderFlushBeforeTs(decoder_t *p_dec,mtime_t i_ts)
+{
+    decoder_owner_sys_t *p_owner = p_dec->p_owner;
+
+    vlc_fifo_Lock(p_owner->p_fifo);
+
+    /* Empty the fifo */
+    vlc_fifo_DequeueAllUnlockedBeforeTs(p_owner->p_fifo,i_ts);
 
     /* Don't need to wait for the DecoderThread to flush. Indeed, if called a
      * second time, this function will clear the FIFO again before anything was
