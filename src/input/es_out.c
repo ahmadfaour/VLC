@@ -647,8 +647,11 @@ static void EsOutSyncVideo(es_out_t *out, mtime_t i_ts)
         }
     }
 
-    for( int i = 0; i < p_sys->i_pgrm; i++ )
+    for( int i = 0; i < p_sys->i_pgrm; i++ ){
         input_clock_Reset( p_sys->pgrm[i]->p_clock );
+        msg_Dbg( p_sys->p_input,"SYNC video: calling clock_Copy");
+        input_clock_Copy_v2a(p_sys->pgrm[i]->p_clock);
+    }
     
     p_sys->b_buffering = true;
     p_sys->i_buffering_extra_initial = 0;
@@ -708,9 +711,12 @@ static void EsOutSyncAudio(es_out_t *out,mtime_t i_ts)
         }
     }
 
-    for( int i = 0; i < p_sys->i_pgrm; i++ )
+    for( int i = 0; i < p_sys->i_pgrm; i++ ){
         input_clock_Reset( p_sys->pgrm[i]->p_clock );
-    
+        msg_Dbg( p_sys->p_input,"SYNC audio: calling clock_Copy");
+        input_clock_Copy_a2v(p_sys->pgrm[i]->p_clock);
+    }
+
     p_sys->b_buffering = true;
     p_sys->i_buffering_extra_initial = 0;
     p_sys->i_buffering_extra_stream = 0;

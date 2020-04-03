@@ -181,6 +181,7 @@ struct input_clock_t
 
     /*Audio clock*/
     input_clock_t* cl_audio;
+    int i_sync_cnt;
 
 };
 
@@ -222,6 +223,7 @@ static input_clock_t *input_clock_New_aux( int i_rate )
     cl->i_pause_date = VLC_TS_INVALID;
 
     cl->cl_audio = NULL;
+    cl->i_sync_cnt = 0;
     return cl;
 }
 
@@ -398,7 +400,83 @@ void input_clock_Reset( input_clock_t *cl )
     input_clock_Reset_aux(cl);
 
 }
+void input_clock_Swap(input_clock_t *cl,mtime_t i_ts){
+    if(i_ts>=38000000){
+        cl->cl_audio=cl;
+    }
+}
+static void input_clock_Copy(input_clock_t *cl_source,input_clock_t *cl_target){
+    //TODO: aquiring the locks causes a delay.
+    //This is NOT thread-safe!
 
+    // vlc_mutex_lock( &cl_source->lock );
+    // vlc_mutex_lock( &cl_target->lock );
+
+    cl_target->last = cl_source->last;
+
+    cl_target->i_ts_max = cl_source->i_ts_max;
+
+    cl_target->i_buffering_duration = cl_source->i_buffering_duration;
+
+    cl_target->i_next_drift_update = cl_source->i_next_drift_update;
+    cl_target->drift  = cl_source->drift;
+
+    cl_target->late.i_index = cl_source->late.i_index;
+    for( int i = 0; i < INPUT_CLOCK_LATE_COUNT; i++ )
+        cl_target->late.pi_value[i] = cl_source->late.pi_value[i];
+    
+    cl_target->ref = cl_source->ref;
+    cl_target->b_has_reference = cl_source->b_has_reference;
+    
+    cl_target->i_external_clock = cl_source->i_external_clock;
+    cl_target->b_has_external_clock = cl_source->b_has_external_clock;
+
+    // cl_target->b_paused = cl_source->b_paused;
+    cl_target->i_rate = cl_source->i_rate;
+    cl_target->i_pts_delay = cl_source->i_pts_delay;
+    // cl_target->i_pause_date = cl_source->i_pause_date;
+
+    // vlc_mutex_unlock( &cl_target->lock );
+    // vlc_mutex_unlock( &cl_source->lock );
+}
+void input_clock_Copy_v2a(input_clock_t *cl){
+    input_clock_t *cl_audio = cl->cl_audio;
+    vlc_mutex_lock( &cl->lock );
+    vlc_mutex_lock( &cl_audio->lock );
+
+    if(cl_audio->i_sync_cnt>0){
+        (cl_audio->i_sync_cnt)--;
+        vlc_mutex_unlock( &cl_audio->lock );
+        vlc_mutex_unlock( &cl->lock );
+        return;
+    }
+    else{
+        cl->i_sync_cnt++;
+        input_clock_Copy(cl,cl_audio);
+    }
+
+    vlc_mutex_unlock( &cl_audio->lock );
+    vlc_mutex_unlock( &cl->lock );
+}
+void input_clock_Copy_a2v(input_clock_t *cl){
+    input_clock_t *cl_audio = cl->cl_audio;
+    vlc_mutex_lock( &cl->lock );
+    vlc_mutex_lock( &cl_audio->lock );
+
+    if(cl->i_sync_cnt>0){
+        (cl->i_sync_cnt)--;
+        vlc_mutex_unlock( &cl_audio->lock );
+        vlc_mutex_unlock( &cl->lock );
+        return;
+    }
+    else{
+        (cl_audio->i_sync_cnt)++;
+        input_clock_Copy(cl_audio,cl);
+    }
+
+    vlc_mutex_unlock( &cl_audio->lock );
+    vlc_mutex_unlock( &cl->lock );
+}
 /*****************************************************************************
  * input_clock_ChangeRate:
  *****************************************************************************/

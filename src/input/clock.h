@@ -149,6 +149,10 @@ void input_clock_GetPaused_video(input_clock_t *cl,bool *b_video_paused);
 void input_clock_Reset_audio( input_clock_t *cl );
 void input_clock_Reset_video( input_clock_t *cl );
 
+void input_clock_Swap(input_clock_t *cl,mtime_t i_ts);
+void input_clock_Copy_v2a(input_clock_t *cl);
+void input_clock_Copy_a2v(input_clock_t *cl);
+
 mtime_t ClockGetStreamSystem(input_clock_t *cl, bool isStream);
 
 #endif
