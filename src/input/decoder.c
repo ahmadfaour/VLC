@@ -65,6 +65,7 @@
 #define SYNC_AUDIO_FLAG "s"
 #define SYNC_VIDEO_FLAG "s"
 #define EMPTY_FLAG "-"
+#define SYNC_PAUSE_INTERVAL 1.5
 /*
  * Possibles values set in p_owner->reload atomic
  */
@@ -1599,6 +1600,11 @@ static void DecoderStoreNewSeg(decoder_t *p_dec, char* p_start,char* p_end,char*
         default:
             msg_Err(p_dec, "unknown ES format");
             return;
+    }
+    //if we have a sync without pause, we add a small pause to sync properly
+    if(p_owner->b_sync && !p_owner->b_paused_mask){
+        p_owner->b_paused_mask = true;
+        p_owner->i_pausing_period = SYNC_PAUSE_INTERVAL * MICRO_SEC;
     }
 }
 static void InitCommandsArray(decoder_t *p_dec,int* commands){
